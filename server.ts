@@ -24,28 +24,42 @@ const ai = new GoogleGenAI({
 
 // Helper for generating with Gemini
 async function askGemini(prompt: string, instruction: string, jsonSchema?: any) {
-  try {
-    const config: any = {
-      systemInstruction: instruction,
-      temperature: 0.8,
-    };
+  const models = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-2.5-flash"];
+  let lastError: any = null;
 
-    if (jsonSchema) {
-      config.responseMimeType = "application/json";
-      config.responseSchema = jsonSchema;
+  for (const modelName of models) {
+    try {
+      console.log(`Attempting Gemini generation with model: ${modelName}`);
+      const config: any = {
+        systemInstruction: instruction,
+        temperature: 0.8,
+      };
+
+      if (jsonSchema) {
+        config.responseMimeType = "application/json";
+        config.responseSchema = jsonSchema;
+      }
+
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: prompt,
+        config,
+      });
+
+      if (response.text) {
+        return response.text.trim();
+      }
+    } catch (err: any) {
+      console.warn(`Model ${modelName} failed. Error:`, err.message || err);
+      lastError = err;
     }
-
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config,
-    });
-
-    return response.text ? response.text.trim() : "";
-  } catch (error: any) {
-    console.error("Gemini API Error:", error);
-    throw new Error(error.message || "Failed to communicate with AI model.");
   }
+
+  // If we reach here, all models failed
+  console.error("All Gemini models exhausted. Final Gemini API Error:", lastError);
+  throw new Error(
+    lastError?.message || "Failed to communicate with any of the available live AI models. Please try again in a moment."
+  );
 }
 
 // ---------------- DATABASE MANAGEMENT ----------------

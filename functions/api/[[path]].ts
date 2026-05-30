@@ -16,53 +16,65 @@ async function fetchGemini(
     throw new Error("GEMINI_API_KEY environment variable is not configured. Please add this in your Cloudflare Pages Variables setting.");
   }
 
-  const model = "gemini-2.5-flash"; // Cloudflare Edge-optimized model mapping
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const models = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-2.5-flash"];
+  let lastError: any = null;
 
-  const requestBody: any = {
-    contents: [
-      {
-        parts: [
-          { text: prompt }
-        ]
+  for (const modelName of models) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+      const requestBody: any = {
+        contents: [
+          {
+            parts: [
+              { text: prompt }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.8,
+        },
+        systemInstruction: {
+          parts: [
+            { text: instruction }
+          ]
+        }
+      };
+
+      if (jsonSchema) {
+        requestBody.generationConfig.responseMimeType = "application/json";
+        requestBody.generationConfig.responseSchema = jsonSchema;
       }
-    ],
-    generationConfig: {
-      temperature: 0.8,
-    },
-    systemInstruction: {
-      parts: [
-        { text: instruction }
-      ]
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Google Gemini Server API responded with status ${response.status}: ${errText}`);
+      }
+
+      const data: any = await response.json();
+      const textOut = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!textOut) {
+        throw new Error("Empty candidate result returned from Gemini API");
+      }
+
+      return textOut.trim();
+    } catch (err: any) {
+      console.warn(`Model ${modelName} in edge failed. Error:`, err.message || err);
+      lastError = err;
     }
-  };
-
-  if (jsonSchema) {
-    requestBody.generationConfig.responseMimeType = "application/json";
-    requestBody.generationConfig.responseSchema = jsonSchema;
   }
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(requestBody)
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error("Gemini Edge Fetch Error status:", response.status, errText);
-    throw new Error(`Google Gemini Server API responded with status ${response.status}: ${errText}`);
-  }
-
-  const data: any = await response.json();
-  const textOut = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!textOut) {
-    throw new Error("Empty candidate result returned from Gemini API");
-  }
-
-  return textOut.trim();
+  throw new Error(
+    `All available Gemini models failover options exhausted on Edge. Last error: ${lastError?.message || lastError}`
+  );
 }
 
 // CORS Headers helper for Cloudflare native handling
