@@ -186,11 +186,18 @@ export default function SettingsPanel({
     setTestingProxy(true);
     try {
       const res = await fetch("/api/auth/linkedin/url");
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "LinkedIn OAuth 2.0 configuration variables are not set yet. Please check the step-by-step developer portal instructions below.");
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Unable to contact the LinkedIn interface securely. Please ensure that LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET are configured under Settings -> Secrets in AI Studio and that the development server has restarted.");
       }
-      const { url } = await res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "LinkedIn OAuth 2.0 configuration variables are not set yet.");
+      }
+      const { url } = data;
+      if (!url) {
+        throw new Error("OAuth redirect URL is missing from server handshake.");
+      }
       const width = 600;
       const height = 700;
       const left = window.screen.width / 2 - width / 2;
@@ -321,143 +328,26 @@ export default function SettingsPanel({
                   </div>
                 )}
 
-                {/* METHOD A: Official OAuth Connection */}
-                <div className="p-4 bg-zinc-900/40 rounded-xl border border-zinc-850/60 space-y-2.5">
+                {/* Secure Official OAuth Connection */}
+                <div className="p-5 bg-zinc-900/30 rounded-xl border border-zinc-850 space-y-3.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] bg-indigo-500/15 text-indigo-400 font-extrabold px-2 py-0.5 rounded uppercase tracking-wider">Method A: Official Auth</span>
+                    <span className="text-[10px] bg-indigo-500/15 text-indigo-400 font-extrabold px-2.5 py-1 rounded uppercase tracking-wider">Official Integration</span>
                     <span className="text-[9px] text-indigo-400 font-bold flex items-center gap-1 font-mono">✓ High Connection Health</span>
                   </div>
                   <div>
-                    <h4 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wide">Sign in with LinkedIn</h4>
-                    <p className="text-[10px] text-zinc-500 leading-relaxed mt-1">Authenticates directly on LinkedIn servers. Safely imports profile data without risking passwords or generating security checkpoint codes.</p>
+                    <h4 className="text-sm font-bold text-zinc-150 uppercase tracking-wide">Sign in with LinkedIn</h4>
+                    <p className="text-[11px] text-zinc-500 leading-relaxed mt-1">Authenticates directly on LinkedIn secure servers. Safely imports profile data without risking passwords or generating security checkpoint codes.</p>
                   </div>
                   
                   <button
                     type="button"
                     onClick={handleConnectOAuth}
                     disabled={testingProxy}
-                    className="w-full py-2.5 px-3 bg-[#0274b3] hover:bg-[#026399] disabled:opacity-50 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-[#0274b3]/10 text-center"
+                    className="w-full py-3 px-3 bg-[#0274b3] hover:bg-[#026399] disabled:opacity-50 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-[#0274b3]/10 text-center"
                   >
                     <Linkedin size={13} />
                     <span>Authorize LinkedIn Profile</span>
                   </button>
-                </div>
-
-                {/* Divider */}
-                <div className="flex items-center gap-3 text-zinc-700">
-                  <div className="flex-1 h-[1px] bg-zinc-800"></div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider">or</span>
-                  <div className="flex-1 h-[1px] bg-zinc-800"></div>
-                </div>
-
-                {/* METHOD B: Automation Cookie */}
-                <div className="space-y-2.5 pt-0.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] bg-purple-500/15 text-purple-400 font-extrabold px-2 py-0.5 rounded uppercase tracking-wider">Method B: Session automation</span>
-                    <span className="text-[9px] text-purple-400 font-bold font-mono">Dripify Premium Mode</span>
-                  </div>
-                  <div>
-                    <h4 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wide">Enter Session Cookie (LI_AT)</h4>
-                    <p className="text-[10px] text-zinc-500 leading-relaxed mt-1">Required for performing background campaign sequence crawling, auto connection requests, and advanced chat inbox crawling.</p>
-                  </div>
-
-                  <form onSubmit={handleConnectNewAccount} className="space-y-3 text-xs text-left">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-zinc-500 font-bold mb-1 uppercase text-[9px]">Profile Full Name *</label>
-                      <input 
-                        type="text"
-                        required
-                        placeholder="e.g. Jessica Taylor"
-                        value={newName}
-                        onChange={e => setNewName(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-zinc-200 focus:outline-none focus:border-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-zinc-500 font-bold mb-1 uppercase text-[9px]">Connections Count</label>
-                      <input 
-                        type="number"
-                        placeholder="e.g. 1500"
-                        value={newConnections}
-                        onChange={e => setNewConnections(parseInt(e.target.value) || 0)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-zinc-500 font-bold mb-1 uppercase text-[9px]">Professional headline</label>
-                    <input 
-                      type="text"
-                      placeholder="e.g. Director of Growth @ TechVantage | ex-HubSpot Recruiting"
-                      value={newHeadline}
-                      onChange={e => setNewHeadline(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-zinc-200 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-zinc-500 font-bold mb-1 uppercase text-[9px]">Residential proxy node ip address</label>
-                    <input 
-                      type="text"
-                      required
-                      placeholder="e.g. US-West-2 (Premium Static Residential) - 67.215.102.18"
-                      value={newProxy}
-                      onChange={e => setNewProxy(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-zinc-500 font-bold mb-1.5 uppercase text-[9px] flex items-center gap-1">
-                      LinkedIn Session Token (LI_AT) *
-                      <span className="text-[10px] text-indigo-400 font-normal lowercase">(li_at cookie)</span>
-                    </label>
-                    <textarea 
-                      required
-                      placeholder="Paste your actual li_at cookie value securely from your Chrome developer tools. Kept in secure local server_db."
-                      value={newCookie}
-                      onChange={e => setNewCookie(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-zinc-300 font-mono h-16 resize-none focus:outline-none focus:border-indigo-500 leading-relaxed text-[10.5px]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-zinc-500 font-bold mb-1 uppercase text-[9px]">Profile Avatar URL</label>
-                    <div className="flex gap-2">
-                      <select 
-                        onChange={e => setNewAvatar(e.target.value)}
-                        className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-2 py-2 text-zinc-400 focus:outline-none"
-                      >
-                        <option value="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80">Corporate Woman representation</option>
-                        <option value="https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80">Executive corporate man representation</option>
-                        <option value="https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80">Recruiter corporate profile</option>
-                        <option value="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80">Alternative technical rep</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Alerts shifted globally to the top to support both Method A and Method B */}
-
-                  <button 
-                    type="submit"
-                    disabled={testingProxy}
-                    className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-zinc-100 rounded-xl font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    {testingProxy ? (
-                      <>
-                        <RefreshCw size={13} className="animate-spin" />
-                        <span>Verifying Proxy Latency Node...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Linkedin size={13} />
-                        <span>Connect LinkedIn Profile & Residential Proxy</span>
-                      </>
-                    )}
-                  </button>
-                </form>
                 </div>
               </div>
 

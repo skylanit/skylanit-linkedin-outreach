@@ -54,11 +54,18 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
     setTestingOAuth(true);
     try {
       const res = await fetch("/api/auth/linkedin/url");
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "LinkedIn OAuth 2.0 configuration variables are not set yet. Please check default client ID & secret parameter listings.");
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Unable to contact the LinkedIn interface securely. Please ensure that LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET are configured under Settings -> Secrets in AI Studio and that the development server has restarted.");
       }
-      const { url } = await res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "LinkedIn OAuth 2.0 configuration variables are not set yet.");
+      }
+      const { url } = data;
+      if (!url) {
+        throw new Error("OAuth redirect URL is missing from server handshake.");
+      }
       const width = 600;
       const height = 700;
       const left = window.screen.width / 2 - width / 2;
@@ -392,7 +399,7 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
             </div>
           )}
 
-          {/* STEP 2: Dual Connection Gate (Secure OAuth + Sandbox Tunnel fallback) */}
+          {/* STEP 2: Dual Connection Gate (Secure OAuth only) */}
           {step === 2 && (
             <div className="space-y-5 max-w-xl mx-auto">
               
@@ -417,9 +424,9 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
               <div className="max-w-md mx-auto space-y-4">
                 
                 {/* METHOD A: Direct LinkedIn Secure OAuth */}
-                <div className="p-5 bg-[#7059FF]/5 border border-[#7059FF]/20 rounded-2xl text-left space-y-3 shadow-sm">
+                <div className="p-6 bg-[#7059FF]/5 border border-[#7059FF]/20 rounded-2xl text-left space-y-4 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-[9.5px] bg-[#7059FF] text-white font-extrabold px-2 py-0.5 rounded uppercase tracking-wider">Method A: Secure Handshake</span>
+                    <span className="text-[9.5px] bg-[#7059FF] text-white font-extrabold px-2 py-0.5 rounded uppercase tracking-wider">Secure Handshake</span>
                     <span className="text-[9.5px] text-[#7059FF] font-bold flex items-center gap-1">✓ Recommended</span>
                   </div>
                   <div>
@@ -431,7 +438,7 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
                     type="button"
                     onClick={handleConnectOAuth}
                     disabled={testingOAuth}
-                    className="w-full py-3 px-4 bg-[#0274b3] hover:bg-[#026399] disabled:opacity-50 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md text-center"
+                    className="w-full py-3.5 px-4 bg-[#0274b3] hover:bg-[#026399] disabled:opacity-50 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md text-center"
                   >
                     {testingOAuth ? (
                       <Loader2 size={13} className="animate-spin" />
@@ -442,84 +449,8 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
                   </button>
                 </div>
 
-                {/* Nice Divider */}
-                <div className="flex items-center gap-3 text-zinc-400">
-                  <div className="flex-1 h-[1px] bg-zinc-200"></div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider">or simulation mode</span>
-                  <div className="flex-1 h-[1px] bg-zinc-200"></div>
-                </div>
-
-                {/* METHOD B: Sandbox simulation tunnel form */}
-                <div className="p-5 bg-white border border-zinc-200/90 rounded-2xl text-left space-y-3.5 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9.5px] bg-zinc-100 text-zinc-500 font-extrabold px-2 py-0.5 rounded uppercase tracking-wider">Method B: Sandbox proxy</span>
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-zinc-800 uppercase tracking-wide">Simulation Credentials (residential tunnel)</h4>
-                    <p className="text-[11.5px] text-zinc-500 leading-relaxed mt-1">Don't have OAuth tokens? Log in with email credentials below to trigger Skylan's interactive sequence and residential IP browser simulation checks.</p>
-                  </div>
-
-                  <form onSubmit={handleStartSimulatedSequence} className="space-y-3" noValidate>
-                    {/* Email Field Panel */}
-                    <div className="space-y-1">
-                      <input 
-                        type="email" 
-                        placeholder="LinkedIn email *"
-                        value={linkedinEmail}
-                        onChange={e => {
-                          setLinkedinEmail(e.target.value);
-                          if (e.target.value) setEmailError(false);
-                        }}
-                        className={`w-full bg-white border rounded-xl px-3.5 py-2.5 text-zinc-800 placeholder-slate-400 text-xs focus:outline-none transition-all ${
-                          emailError 
-                            ? 'border-red-500 focus:ring-1 focus:ring-red-200' 
-                            : 'border-slate-200 focus:border-[#7059FF]'
-                        }`}
-                      />
-                      {emailError && (
-                        <p className="text-red-500 text-[10px] font-sans pl-1">
-                          The field is required
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Password Field Panel */}
-                    <div className="space-y-1">
-                      <input 
-                        type="password" 
-                        placeholder="LinkedIn password *"
-                        value={linkedinPassword}
-                        onChange={e => {
-                          setLinkedinPassword(e.target.value);
-                          if (e.target.value) setPasswordError(false);
-                        }}
-                        className={`w-full bg-white border rounded-xl px-3.5 py-2.5 text-zinc-800 placeholder-slate-400 text-xs focus:outline-none transition-all ${
-                          passwordError 
-                            ? 'border-red-500 focus:ring-1 focus:ring-red-200' 
-                            : 'border-slate-200 focus:border-[#7059FF]'
-                        }`}
-                      />
-                      {passwordError && (
-                        <p className="text-red-500 text-[10px] font-sans pl-1">
-                          The field is required
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Button Container aligned to screenshot */}
-                    <div className="pt-1.5">
-                      <button 
-                        type="submit"
-                        className="w-full bg-zinc-900 hover:bg-zinc-800 text-white py-2.5 rounded-xl text-xs font-semibold transition-all shadow-md active:scale-[0.99] flex items-center justify-center cursor-pointer font-sans"
-                      >
-                        Start sandbox proxy sequence
-                      </button>
-                    </div>
-                  </form>
-                </div>
-
                 {/* Back Link to Step 1 */}
-                <div className="text-center pt-1">
+                <div className="text-center pt-2">
                   <button 
                     type="button"
                     onClick={() => setStep(1)}
