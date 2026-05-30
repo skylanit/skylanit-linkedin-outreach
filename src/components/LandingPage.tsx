@@ -120,10 +120,10 @@ export default function LandingPage({ onEnterApp }: LandingPageProps) {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center font-bold text-lg text-zinc-100 shadow-lg shadow-indigo-500/10">
-              D
+              S
             </div>
             <span className="font-extrabold text-base tracking-tight text-zinc-100">
-              Dripify <span className="text-zinc-500 font-medium text-xs">LinkedIn Outreach</span>
+              skylan <span className="text-zinc-500 font-medium text-xs">LinkedIn Outreach</span>
             </span>
           </div>
 
