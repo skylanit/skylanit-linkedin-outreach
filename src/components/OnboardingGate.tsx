@@ -33,18 +33,8 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
   const [targetIndustry, setTargetIndustry] = React.useState('Software Founders & Tech CTOs');
   const [customIndustry, setCustomIndustry] = React.useState('');
 
-  // Form Step 2: Dripify-style LinkedIn Connect Details
-  const [linkedinEmail, setLinkedinEmail] = React.useState('');
-  const [linkedinPassword, setLinkedinPassword] = React.useState('');
-  
-  // Validation States matching screenshot
-  const [emailError, setEmailError] = React.useState(false);
-  const [passwordError, setPasswordError] = React.useState(false);
-
-  // Form Step 3: Interactive Headless Simulation Checks
-  const [verifyingStage, setVerifyingStage] = React.useState<0 | 1 | 2 | 3 | 4>(0);
-  const [otpCode, setOtpCode] = React.useState('');
-  const [submittingOtp, setSubmittingOtp] = React.useState(false);
+  // Form Step 3: Interactive Verification Checks
+  const [verifyingStage, setVerifyingStage] = React.useState<0 | 3 | 4>(0);
   const [errorText, setErrorText] = React.useState('');
   const [simulatedLogs, setSimulatedLogs] = React.useState<string[]>([]);
   const [testingOAuth, setTestingOAuth] = React.useState(false);
@@ -157,104 +147,6 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
     }
     setErrorText('');
     setStep(2);
-  };
-
-  // Triggers the exact visual verification proxy simulation steps
-  const handleStartSimulatedSequence = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    let hasValidationError = false;
-    
-    if (!linkedinEmail.trim()) {
-      setEmailError(true);
-      hasValidationError = true;
-    } else {
-      setEmailError(false);
-    }
-
-    if (!linkedinPassword.trim()) {
-      setPasswordError(true);
-      hasValidationError = true;
-    } else {
-      setPasswordError(false);
-    }
-
-    if (hasValidationError) {
-      return;
-    }
-
-    setErrorText('');
-    setStep(3);
-    setVerifyingStage(1);
-    setSimulatedLogs([]);
-
-    // Staggered output simulation lines
-    addLog("Initializing US-West residential static proxy tunnel...", 100);
-    addLog("Bound tunnel proxy: US-West-2 (Seattle Static Premium) - latency: 120ms", 800);
-    addLog("Spawning instance of secure sandboxed Google Chrome browser...", 1600);
-    addLog("Spoofing audio-context fingerprints & localized canvas hardware webGL parameters...", 2400);
-    addLog("Loading login.linkedin.com/login-portal safely...", 3200);
-    addLog(`Transmitting encrypted credential handshake sequence for user: ${linkedinEmail}`, 4000);
-
-    setTimeout(() => {
-      setVerifyingStage(2); // Presents the 2FA Code box
-      addLog("⚠️ SECURITY CHALLENGE: Verification OTP requested by LinkedIn secure login gateway guard.", 0);
-    }, 4900);
-  };
-
-  const addLog = (msg: string, delay: number) => {
-    setTimeout(() => {
-      setSimulatedLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
-    }, delay);
-  };
-
-  const handleOtpConfirm = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!otpCode || otpCode.length < 6) {
-      setErrorText("Please enter the 6-digit verification code to complete connection authorization.");
-      return;
-    }
-
-    setErrorText('');
-    setSubmittingOtp(true);
-    setVerifyingStage(3); // Shows Gemini custom database synthesizer loading panel
-
-    addLog("Confirming authorization PIN to live browser state session...", 100);
-    addLog("Evaluating response variables and persistent security cookies...", 800);
-    addLog("LinkedIn connection successful! Session authorization verified and saved.", 1600);
-    addLog("Engaging Gemini 3.5 AI model to synthesize hyper-realistic B2B campaigns tailored to target industry...", 2400);
-
-    const activeIndustry = targetIndustry === 'custom' ? customIndustry : targetIndustry;
-
-    try {
-      const response = await fetch("/api/linkedin/onboard-custom-boost", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ownerName,
-          ownerEmail,
-          linkedinEmail,
-          linkedinPassword,
-          targetIndustry: activeIndustry
-        })
-      });
-
-      const data = await response.json();
-      setSubmittingOtp(false);
-
-      if (data.status === 'success') {
-        setVerifyingStage(4); // Success launch state
-        addLog(`Successfully hydrated realistic ${activeIndustry} leads, sequencing steps, and historical messages!`, 100);
-        addLog("Workspace ready. Opening target lead dashboard...", 800);
-      } else {
-        setVerifyingStage(1);
-        setErrorText(data.error || "The remote session rejected authentication. Check credentials and retry.");
-      }
-    } catch {
-      setSubmittingOtp(false);
-      setVerifyingStage(1);
-      setErrorText("A localized network timeout occurred during proxy handshake. Please try verifying again.");
-    }
   };
 
   return (
@@ -490,54 +382,7 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
                     )}
                   </div>
                 ))}
-                {verifyingStage === 1 && (
-                  <div className="flex items-center gap-1.5 mt-1 text-indigo-400">
-                    <Loader2 size={11} className="animate-spin" />
-                    <span>Simulating user browser context login...</span>
-                  </div>
-                )}
               </div>
-
-              {/* OTP Input box corresponding to security verification */}
-              {verifyingStage === 2 && (
-                <form onSubmit={handleOtpConfirm} className="space-y-4 border border-indigo-200 p-4 rounded-xl bg-indigo-50/10 shadow-sm">
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-center text-[10.5px]">
-                      <label className="font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-1">
-                        <Lock size={12} /> Enter 6-Digit OTP security code *
-                      </label>
-                      <span className="text-slate-500 font-mono text-[10px]">{linkedinEmail}</span>
-                    </div>
-                    <p className="text-slate-500 text-xs leading-relaxed mt-1">
-                      LinkedIn security triggers a verification code when accessed through new static residential proxy locations. Enter the login pin sent to your inbox.
-                    </p>
-                    
-                    <input 
-                      type="text"
-                      maxLength={6}
-                      required
-                      placeholder="e.g. 941022"
-                      value={otpCode}
-                      onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                      className="w-full text-center mt-3 bg-white border border-zinc-200 focus:border-[#7059FF] rounded-xl p-3 text-2xl font-mono text-zinc-900 tracking-[0.25em] focus:outline-none"
-                    />
-                  </div>
-
-                  {errorText && (
-                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-xs flex items-center gap-2">
-                      <AlertCircle size={13} className="flex-shrink-0" />
-                      <span>{errorText}</span>
-                    </div>
-                  )}
-
-                  <button 
-                    type="submit"
-                    className="w-full py-3 bg-[#7059FF] hover:bg-[#5C45EA] text-white rounded-xl font-bold transition-all text-xs flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    Confirm Code & Validate Session
-                  </button>
-                </form>
-              )}
 
               {/* Gemini Synthesis stage */}
               {verifyingStage === 3 && (
