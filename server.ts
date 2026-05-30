@@ -569,15 +569,17 @@ app.post("/api/accounts/test-proxy", (req, res) => {
   }, 1000);
 });
 
-const getRedirectUri = (req: any) => {
+const getRedirectUri = (req: any, isNewPath = true) => {
   const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
   const cleanBase = baseUrl.replace(/\/+$/, "");
-  return `${cleanBase}/api/auth/linkedin/callback`;
+  const path = isNewPath ? "/api/connect/li/callback" : "/api/auth/linkedin/callback";
+  return `${cleanBase}${path}`;
 };
 
-// Initiate LinkedIn OAuth 2.0 flow
-app.get("/api/auth/linkedin/url", (req, res) => {
+// Initiate LinkedIn OAuth 2.0 flow (Supports legacy and generic obfuscated path for privacy blockers)
+app.get(["/api/auth/linkedin/url", "/api/connect/li/url"], (req, res) => {
   try {
+    const isNew = req.path.includes("/connect/li");
     const clientId = process.env.LINKEDIN_CLIENT_ID || "86ufehp1ori1dk";
     if (!clientId) {
       return res.status(400).json({ 
@@ -585,7 +587,7 @@ app.get("/api/auth/linkedin/url", (req, res) => {
       });
     }
 
-    const redirectUri = getRedirectUri(req);
+    const redirectUri = getRedirectUri(req, isNew);
     const state = Math.random().toString(36).substring(2, 15);
 
     const params = new URLSearchParams({
@@ -599,13 +601,13 @@ app.get("/api/auth/linkedin/url", (req, res) => {
     const authUrl = `https://www.linkedin.com/oauth/v2/authorization?${params.toString()}`;
     return res.json({ url: authUrl });
   } catch (err: any) {
-    console.error("Error in /api/auth/linkedin/url:", err);
+    console.error("Error in generating authorize URL:", err);
     return res.status(500).json({ error: err.message || "Failed to generate authorization URL on server." });
   }
 });
 
 // Secure status check to verify environment loading (does not leak secret values)
-app.get("/api/auth/linkedin/status", (req, res) => {
+app.get(["/api/auth/linkedin/status", "/api/connect/li/status"], (req, res) => {
   const clientId = process.env.LINKEDIN_CLIENT_ID || "86ufehp1ori1dk";
   const clientSecret = process.env.LINKEDIN_CLIENT_SECRET || "WPL_AP1.kn9mlO61okp7KkbX.bqENMg==";
   res.json({
@@ -620,7 +622,7 @@ app.get("/api/auth/linkedin/status", (req, res) => {
 });
 
 // LinkedIn OAuth 2.0 Callback endpoint
-app.get(["/api/auth/linkedin/callback", "/api/auth/linkedin/callback/"], async (req, res) => {
+app.get(["/api/auth/linkedin/callback", "/api/auth/linkedin/callback/", "/api/connect/li/callback", "/api/connect/li/callback/"], async (req, res) => {
   const { code, error, error_description } = req.query;
 
   if (error) {
@@ -650,7 +652,8 @@ app.get(["/api/auth/linkedin/callback", "/api/auth/linkedin/callback/"], async (
   }
 
   try {
-    const redirectUri = getRedirectUri(req);
+    const isNew = req.path.includes("/connect/li");
+    const redirectUri = getRedirectUri(req, isNew);
 
     // Exchange Code for Access Token
     const params = new URLSearchParams({

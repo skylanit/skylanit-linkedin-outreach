@@ -545,9 +545,10 @@ export const onRequest = async (context: any) => {
     }
 
     // C. OAUTH: Initiate LinkedIn OAuth 2.0 URL
-    if (path === "/api/auth/linkedin/url" && method === "GET") {
+    if ((path === "/api/auth/linkedin/url" || path === "/api/connect/li/url") && method === "GET") {
+      const isNew = path.includes("/connect/li");
       const clientId = context.env.LINKEDIN_CLIENT_ID || "86ufehp1ori1dk";
-      const redirectUri = `${url.origin}/api/auth/linkedin/callback`;
+      const redirectUri = isNew ? `${url.origin}/api/connect/li/callback` : `${url.origin}/api/auth/linkedin/callback`;
       const state = Math.random().toString(36).substring(2, 15);
 
       const params = new URLSearchParams({
@@ -563,7 +564,7 @@ export const onRequest = async (context: any) => {
     }
 
     // D. OAUTH: Verify OAuth Credentials Status
-    if (path === "/api/auth/linkedin/status" && method === "GET") {
+    if ((path === "/api/auth/linkedin/status" || path === "/api/connect/li/status") && method === "GET") {
       const clientId = context.env.LINKEDIN_CLIENT_ID || "86ufehp1ori1dk";
       const clientSecret = context.env.LINKEDIN_CLIENT_SECRET || "WPL_AP1.kn9mlO61okp7KkbX.bqENMg==";
       return makeResponse({
@@ -578,7 +579,7 @@ export const onRequest = async (context: any) => {
     }
 
     // E. OAUTH: LinkedIn Callback verification endpoint
-    if ((path === "/api/auth/linkedin/callback" || path === "/api/auth/linkedin/callback/") && method === "GET") {
+    if ((path === "/api/auth/linkedin/callback" || path === "/api/auth/linkedin/callback/" || path === "/api/connect/li/callback" || path === "/api/connect/li/callback/") && method === "GET") {
       const linkedinError = url.searchParams.get("error");
       const linkedinErrorDesc = url.searchParams.get("error_description");
       const code = url.searchParams.get("code");
@@ -601,14 +602,16 @@ export const onRequest = async (context: any) => {
         return makeResponse("Authorization code missing from LinkedIn redirection query.", 400, true);
       }
 
+      const isNew = path.includes("/connect/li");
       const clientId = context.env.LINKEDIN_CLIENT_ID || "86ufehp1ori1dk";
       const clientSecret = context.env.LINKEDIN_CLIENT_SECRET || "WPL_AP1.kn9mlO61okp7KkbX.bqENMg==";
+      const redirectUri = isNew ? `${url.origin}/api/connect/li/callback` : `${url.origin}/api/auth/linkedin/callback`;
 
       // Exchange code for Access Token
       const tokenParams = new URLSearchParams({
         grant_type: "authorization_code",
         code: code,
-        redirect_uri: `${url.origin}/api/auth/linkedin/callback`,
+        redirect_uri: redirectUri,
         client_id: clientId,
         client_secret: clientSecret
       });
