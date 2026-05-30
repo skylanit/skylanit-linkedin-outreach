@@ -35,6 +35,7 @@ import {
 
 // Panels
 import LandingPage from './components/LandingPage';
+import OnboardingGate from './components/OnboardingGate';
 import DashboardStats from './components/DashboardStats';
 import CampaignsPanel from './components/CampaignsPanel';
 import LeadsPanel from './components/LeadsPanel';
@@ -58,15 +59,18 @@ import {
 
 export default function App() {
   const [showLanding, setShowLanding] = React.useState(true);
+  const [isOnboarding, setIsOnboarding] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<string>('dashboard');
 
   // React Global State corresponding to loaded items
-  const [campaigns, setCampaigns] = React.useState<Campaign[]>(initialCampaigns);
-  const [leads, setLeads] = React.useState<Lead[]>(initialLeads);
+  const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
+  const [leads, setLeads] = React.useState<Lead[]>([]);
   const [linkedinAccount, setLinkedinAccount] = React.useState<LinkedInAccount>(initialLinkedInAccount);
-  const [chatMessages, setChatMessages] = React.useState<ChatMessage[]>(initialChatMessages);
-  const [teamMembers, setTeamMembers] = React.useState<TeamMember[]>(initialTeamMembers);
+  const [linkedinAccounts, setLinkedinAccounts] = React.useState<LinkedInAccount[]>([]);
+  const [chatMessages, setChatMessages] = React.useState<ChatMessage[]>([]);
+  const [teamMembers, setTeamMembers] = React.useState<TeamMember[]>([]);
   const [integrations, setIntegrations] = React.useState<IntegrationSettings>(initialIntegrations);
+  const [isLoading, setIsLoading] = React.useState(true);
 
   // Automation logs and active execution metrics polling
   const [automationQueueStats, setAutomationQueueStats] = React.useState<any>(null);
@@ -74,8 +78,82 @@ export default function App() {
   // Quick channel/inbox routing help
   const [selectedLeadId, setSelectedLeadId] = React.useState<string | null>(null);
 
+  // Helper to save current progress to our Node persistent backend
+  const saveToDB = (updates: {
+    accounts?: LinkedInAccount[];
+    campaigns?: Campaign[];
+    leads?: Lead[];
+    chatMessages?: ChatMessage[];
+    teamMembers?: TeamMember[];
+    integrations?: IntegrationSettings;
+  }) => {
+    fetch("/api/db/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates)
+    }).catch(err => console.error("Could not sync state to server db:", err));
+  };
+
+  // 1. Load entire database state on first bootstrap mount
   React.useEffect(() => {
-    // Poll the automated Playwright/Puppeteer simulated logs queue from Node Express server
+    const loadInitDB = () => {
+      fetch("/api/db/get")
+        .then(res => res.json())
+        .then(db => {
+          if (db) {
+            if (db.campaigns) setCampaigns(db.campaigns);
+            if (db.leads) setLeads(db.leads);
+            if (db.chatMessages) setChatMessages(db.chatMessages);
+            if (db.teamMembers) setTeamMembers(db.teamMembers);
+            if (db.integrations) setIntegrations(db.integrations);
+            if (db.accounts) {
+              setLinkedinAccounts(db.accounts);
+              const active = db.accounts.find((a: any) => a.isActive) || db.accounts[0];
+              if (active) {
+                setLinkedinAccount(active);
+              }
+            }
+          }
+          setIsLoading(false);
+        })
+        .catch(err => {
+          console.error("Failed to fetch persistent db snapshot:", err);
+          setIsLoading(false);
+        });
+    };
+    loadInitDB();
+  }, []);
+
+  // 2. Poll changes periodically (e.g. background automation logs and stage progressions)
+  React.useEffect(() => {
+    const pollDatabaseUpdates = () => {
+      fetch("/api/db/get")
+        .then(res => res.json())
+        .then(db => {
+          if (db) {
+            if (db.campaigns) setCampaigns(db.campaigns);
+            if (db.leads) setLeads(db.leads);
+            if (db.chatMessages) setChatMessages(db.chatMessages);
+            if (db.teamMembers) setTeamMembers(db.teamMembers);
+            if (db.integrations) setIntegrations(db.integrations);
+            if (db.accounts) {
+              setLinkedinAccounts(db.accounts);
+              const active = db.accounts.find((a: any) => a.isActive) || db.accounts[0];
+              if (active) {
+                setLinkedinAccount(active);
+              }
+            }
+          }
+        })
+        .catch(err => console.error("Poll database sync error:", err));
+    };
+
+    const dbInterval = setInterval(pollDatabaseUpdates, 15000); // refresh full DB state from backend every 15 seconds
+    return () => clearInterval(dbInterval);
+  }, [linkedinAccounts, linkedinAccount]);
+
+  // Poll automation logs from Node Express server
+  React.useEffect(() => {
     const fetchQueueStats = () => {
       fetch("/api/automation/queue")
         .then(res => res.json())
@@ -102,19 +180,22 @@ export default function App() {
         { id: `act-${Date.now()}-1`, type: "import", timestamp: new Date().toISOString(), description: `Lead created manually under sequence: ${newLeadData.campaignName}` }
       ]
     };
-    setLeads([newLd, ...leads]);
+    const nextLeads = [newLd, ...leads];
+    setLeads(nextLeads);
     
     // Increment leads count for that campaign sequence
-    setCampaigns(campaigns.map(c => {
+    const nextCampaigns = campaigns.map(c => {
       if (c.id === newLeadData.campaignId) {
         return { ...c, leadsCount: c.leadsCount + 1 };
       }
       return c;
-    }));
+    });
+    setCampaigns(nextCampaigns);
+    saveToDB({ leads: nextLeads, campaigns: nextCampaigns });
   };
 
   const handleUpdateLeadStage = (leadId: string, stage: Lead['stage']) => {
-    setLeads(leads.map(l => {
+    const nextLeads = leads.map(l => {
       if (l.id === leadId) {
         const addedActivity = {
           id: `act-stage-${Date.now()}`,
@@ -130,11 +211,13 @@ export default function App() {
         };
       }
       return l;
-    }));
+    });
+    setLeads(nextLeads);
+    saveToDB({ leads: nextLeads });
   };
 
   const handleAddNoteToLead = (leadId: string, noteText: string) => {
-    setLeads(leads.map(l => {
+    const nextLeads = leads.map(l => {
       if (l.id === leadId) {
         const addedActivity = {
           id: `act-note-${Date.now()}`,
@@ -150,7 +233,9 @@ export default function App() {
         };
       }
       return l;
-    }));
+    });
+    setLeads(nextLeads);
+    saveToDB({ leads: nextLeads });
   };
 
   const handleSendMessage = (leadId: string, text: string, channel: 'linkedin' | 'email') => {
@@ -163,10 +248,11 @@ export default function App() {
       channel,
       read: true
     };
-    setChatMessages([...chatMessages, freshMsg]);
+    const nextMsgs = [...chatMessages, freshMsg];
+    setChatMessages(nextMsgs);
 
     // Push automatic update in lead's history log
-    setLeads(leads.map(l => {
+    const nextLeads = leads.map(l => {
       if (l.id === leadId) {
         const addedActivity = {
           id: `act-outmsg-${Date.now()}`,
@@ -181,7 +267,9 @@ export default function App() {
         };
       }
       return l;
-    }));
+    });
+    setLeads(nextLeads);
+    saveToDB({ chatMessages: nextMsgs, leads: nextLeads });
   };
 
   // Campaigns sequences actions
@@ -205,33 +293,55 @@ export default function App() {
       },
       createdAt: new Date().toISOString().split('T')[0]
     };
-    setCampaigns([FreshC, ...campaigns]);
+    const nextCampaigns = [FreshC, ...campaigns];
+    setCampaigns(nextCampaigns);
+    saveToDB({ campaigns: nextCampaigns });
   };
 
   const handleUpdateCampaignStatus = (campaignId: string, status: Campaign['status']) => {
-    setCampaigns(campaigns.map(c => {
+    const nextCampaigns = campaigns.map(c => {
       if (c.id === campaignId) {
         return { ...c, status };
       }
       return c;
-    }));
+    });
+    setCampaigns(nextCampaigns);
+    saveToDB({ campaigns: nextCampaigns });
   };
 
   const handleUpdateSteps = (campaignId: string, steps: CampaignStep[]) => {
-    setCampaigns(campaigns.map(c => {
+    const nextCampaigns = campaigns.map(c => {
       if (c.id === campaignId) {
         return { ...c, steps };
       }
       return c;
-    }));
+    });
+    setCampaigns(nextCampaigns);
+    saveToDB({ campaigns: nextCampaigns });
   };
 
   const handleUpdateLinkedInAccount = (updates: Partial<LinkedInAccount>) => {
-    setLinkedinAccount({ ...linkedinAccount, ...updates });
+    const updatedAccount = { ...linkedinAccount, ...updates };
+    setLinkedinAccount(updatedAccount);
+
+    const updatedList = linkedinAccounts.map(a => a.id === linkedinAccount.id ? updatedAccount : a);
+    setLinkedinAccounts(updatedList);
+    saveToDB({ accounts: updatedList });
+  };
+
+  const handleUpdateAccounts = (nextAccounts: LinkedInAccount[]) => {
+    setLinkedinAccounts(nextAccounts);
+    const active = nextAccounts.find(a => a.isActive);
+    if (active) {
+      setLinkedinAccount(active);
+    }
+    saveToDB({ accounts: nextAccounts });
   };
 
   const handleUpdateIntegrations = (updates: Partial<IntegrationSettings>) => {
-    setIntegrations({ ...integrations, ...updates });
+    const nextIntegrations = { ...integrations, ...updates };
+    setIntegrations(nextIntegrations);
+    saveToDB({ integrations: nextIntegrations });
   };
 
   const handleSelectLeadChat = (leadId: string) => {
@@ -249,19 +359,57 @@ export default function App() {
       status: 'invited',
       joinedAt: new Date().toISOString().split('T')[0]
     };
-    setTeamMembers([...teamMembers, FreshTeam]);
+    const nextTeam = [...teamMembers, FreshTeam];
+    setTeamMembers(nextTeam);
+    saveToDB({ teamMembers: nextTeam });
   };
 
   const handleRemoveMember = (id: string) => {
-    setTeamMembers(teamMembers.filter(t => t.id !== id));
+    const nextTeam = teamMembers.filter(t => t.id !== id);
+    setTeamMembers(nextTeam);
+    saveToDB({ teamMembers: nextTeam });
   };
 
   const handleUpdateRole = (id: string, role: TeamMember['role']) => {
-    setTeamMembers(teamMembers.map(t => t.id === id ? { ...t, role } : t));
+    const nextTeam = teamMembers.map(t => t.id === id ? { ...t, role } : t);
+    setTeamMembers(nextTeam);
+    saveToDB({ teamMembers: nextTeam });
   };
 
   if (showLanding) {
-    return <LandingPage onEnterApp={() => setShowLanding(false)} />;
+    return <LandingPage onEnterApp={() => { setShowLanding(false); setIsOnboarding(true); }} />;
+  }
+
+  if (isOnboarding) {
+    return (
+      <OnboardingGate 
+        onCompleted={(ownerName) => {
+          setIsOnboarding(false);
+          setIsLoading(true);
+          // Refetch database state directly so we immediately transition with the generated custom industry dataset!
+          fetch("/api/db/get")
+            .then(res => res.json())
+            .then(db => {
+              if (db) {
+                if (db.campaigns) setCampaigns(db.campaigns);
+                if (db.leads) setLeads(db.leads);
+                if (db.chatMessages) setChatMessages(db.chatMessages);
+                if (db.teamMembers) setTeamMembers(db.teamMembers);
+                if (db.integrations) setIntegrations(db.integrations);
+                if (db.accounts) {
+                  setLinkedinAccounts(db.accounts);
+                  const active = db.accounts.find((a: any) => a.isActive) || db.accounts[0];
+                  if (active) {
+                    setLinkedinAccount(active);
+                  }
+                }
+              }
+              setIsLoading(false);
+            })
+            .catch(() => setIsLoading(false));
+        }}
+      />
+    );
   }
 
   // Active Menu tabs definition to render inside dashboard body context
@@ -424,9 +572,11 @@ export default function App() {
           {activeTab === 'settings' && (
             <SettingsPanel 
               linkedinAccount={linkedinAccount}
+              linkedinAccounts={linkedinAccounts}
               integrationSettings={integrations}
               onUpdateLinkedInAccount={handleUpdateLinkedInAccount}
               onUpdateIntegrations={handleUpdateIntegrations}
+              onUpdateAccounts={handleUpdateAccounts}
             />
           )}
 

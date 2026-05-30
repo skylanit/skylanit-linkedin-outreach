@@ -12,27 +12,44 @@ import {
   Unlock,
   Sliders,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Trash2,
+  PlusCircle,
+  Check,
+  Globe,
+  Info
 } from 'lucide-react';
 import { LinkedInAccount, IntegrationSettings } from '../types';
 
 interface SettingsPanelProps {
   linkedinAccount: LinkedInAccount;
+  linkedinAccounts?: LinkedInAccount[];
   integrationSettings: IntegrationSettings;
   onUpdateLinkedInAccount: (account: Partial<LinkedInAccount>) => void;
   onUpdateIntegrations: (integrations: Partial<IntegrationSettings>) => void;
+  onUpdateAccounts?: (accounts: LinkedInAccount[]) => void;
 }
 
 export default function SettingsPanel({
   linkedinAccount,
+  linkedinAccounts = [],
   integrationSettings,
   onUpdateLinkedInAccount,
-  onUpdateIntegrations
+  onUpdateIntegrations,
+  onUpdateAccounts
 }: SettingsPanelProps) {
-  const [sessionCookie, setSessionCookie] = React.useState(linkedinAccount.sessionCookie);
-  const [proxy, setProxy] = React.useState(linkedinAccount.proxy);
+  // New account form states
+  const [newName, setNewName] = React.useState('');
+  const [newHeadline, setNewHeadline] = React.useState('');
+  const [newConnections, setNewConnections] = React.useState(1200);
+  const [newProxy, setNewProxy] = React.useState('US-East-1 (Premium static Residential) - 67.215.102.18');
+  const [newCookie, setNewCookie] = React.useState('');
+  const [newAvatar, setNewAvatar] = React.useState('https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80');
+
   const [testingProxy, setTestingProxy] = React.useState(false);
   const [proxyResult, setProxyResult] = React.useState<'success' | 'failed' | null>(null);
+  const [formError, setFormError] = React.useState('');
+  const [formSuccess, setFormSuccess] = React.useState('');
 
   // Rate Limits States
   const [limits, setLimits] = React.useState({
@@ -53,14 +70,114 @@ export default function SettingsPanel({
 
   const [activeTab, setActiveTab] = React.useState<'linkedin' | 'limits' | 'integrations' | 'billing'>('linkedin');
 
-  const handleTestProxy = () => {
+  // Trigger proxy latency connectivity test of the selected residential IP
+  const handleTestProxy = (proxyStr: string) => {
     setTestingProxy(true);
     setProxyResult(null);
-    setTimeout(() => {
+
+    fetch("/api/accounts/test-proxy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proxy: proxyStr })
+    })
+    .then(res => res.json())
+    .then(data => {
       setTestingProxy(false);
-      setProxyResult('success');
-      onUpdateLinkedInAccount({ proxy, proxyStatus: 'verified' });
-    }, 1500);
+      if (data.status === 'success') {
+        setProxyResult('success');
+      } else {
+        setProxyResult('failed');
+      }
+    })
+    .catch(() => {
+      setTestingProxy(false);
+      setProxyResult('failed');
+    });
+  };
+
+  // Switch which connected account actively drives the sequencing crawls
+  const handleSetActiveAccount = (id: string) => {
+    if (!onUpdateAccounts) return;
+    const nextAccounts = linkedinAccounts.map(acc => ({
+      ...acc,
+      isActive: acc.id === id
+    }));
+    onUpdateAccounts(nextAccounts);
+  };
+
+  // Disconnect a LinkedIn Account securely
+  const handleDeleteAccount = (id: string) => {
+    if (!onUpdateAccounts) return;
+    if (linkedinAccounts.length <= 1) {
+      alert("At least one active connected LinkedIn profile is required to run campaigns.");
+      return;
+    }
+    const filtered = linkedinAccounts.filter(acc => acc.id !== id);
+    // Ensure one is left active!
+    if (!filtered.some(a => a.isActive)) {
+      filtered[0].isActive = true;
+    }
+    onUpdateAccounts(filtered);
+  };
+
+  // Handle adding a brand-new LinkedIn pipeline account
+  const handleConnectNewAccount = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError('');
+    setFormSuccess('');
+
+    if (!newName.trim() || !newCookie.trim()) {
+      setFormError("Account Full Name and LinkedIn Cookie (LI_AT) are required.");
+      return;
+    }
+
+    setTestingProxy(true);
+    
+    // Auto proxy verification on connection attempt
+    fetch("/api/accounts/test-proxy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proxy: newProxy })
+    })
+    .then(res => res.json())
+    .then(data => {
+      setTestingProxy(false);
+      
+      const newAcc: LinkedInAccount = {
+        id: `acc-fresh-${Date.now()}`,
+        connected: true,
+        name: newName,
+        avatarUrl: newAvatar,
+        headline: newHeadline || "SaaS Builder & Marketing Advisor",
+        connectionsCount: Number(newConnections) || 500,
+        sessionCookie: newCookie,
+        proxy: newProxy,
+        proxyStatus: data.status === 'success' ? 'verified' : 'failed',
+        healthStatus: 'healthy',
+        isActive: linkedinAccounts.length === 0, // set active if it's the first one
+        rateLimits: {
+          invitesPerDay: 40,
+          messagesPerDay: 80,
+          profileViewsPerDay: 50,
+          humanDelayMinSec: 45,
+          humanDelayMaxSec: 180
+        }
+      };
+
+      if (onUpdateAccounts) {
+        onUpdateAccounts([...linkedinAccounts, newAcc]);
+        setFormSuccess(`Successfully authenticated & proxy-bounded LinkedIn profile for '${newName}'!`);
+        // Reset form variables
+        setNewName('');
+        setNewHeadline('');
+        setNewCookie('');
+        setNewConnections(1500);
+      }
+    })
+    .catch(() => {
+      setTestingProxy(false);
+      setFormError("Proxy integrity check timed out. Please specify a valid and routeable proxy IP node.");
+    });
   };
 
   const handleSaveLimits = (e: React.FormEvent) => {
@@ -70,11 +187,6 @@ export default function SettingsPanel({
       onUpdateLinkedInAccount({ rateLimits: limits });
       setSavingLimits(false);
     }, 800);
-  };
-
-  const handleSaveLinkedInConfig = (e: React.FormEvent) => {
-    e.preventDefault();
-    onUpdateLinkedInAccount({ sessionCookie });
   };
 
   const handleSaveIntegrations = (e: React.FormEvent) => {
@@ -88,160 +200,300 @@ export default function SettingsPanel({
   };
 
   return (
-    <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden backdrop-blur-md flex flex-col md:flex-row min-h-[500px]" id="settings-panel">
+    <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden backdrop-blur-md flex flex-col md:flex-row min-h-[550px]" id="settings-panel">
       
       {/* Settings Navigation sub-menus */}
-      <div className="md:w-64 border-r border-zinc-800 p-4 space-y-2 text-xs text-left bg-zinc-950/25">
-        <h3 className="font-bold text-zinc-400 uppercase tracking-wider px-3 mb-4 text-[10px]">Settings Management</h3>
+      <div className="md:w-64 border-r border-zinc-800 p-5 space-y-2 text-xs text-left bg-zinc-950/25">
+        <div className="flex items-center gap-2 mb-4 px-1.5 pt-1">
+          <Settings size={14} className="text-indigo-400" />
+          <h3 className="font-bold text-zinc-300 uppercase tracking-wider text-[10px]">CRM Safe Settings</h3>
+        </div>
         
         <button 
           onClick={() => setActiveTab('linkedin')}
-          className={`w-full p-2.5 px-3 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${activeTab === 'linkedin' ? 'bg-indigo-600 text-zinc-100 font-bold' : 'text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-200'}`}
+          className={`w-full p-2.5 px-3.5 rounded-xl flex items-center gap-2.5 cursor-pointer transition-all ${activeTab === 'linkedin' ? 'bg-indigo-600/90 text-zinc-100 font-bold shadow-lg shadow-indigo-600/10' : 'text-zinc-500 hover:bg-zinc-800/20 hover:text-zinc-300'}`}
         >
           <Linkedin size={14} />
-          LinkedIn Profile Auth
+          <span>Connect Profiles</span>
         </button>
 
         <button 
           onClick={() => setActiveTab('limits')}
-          className={`w-full p-2.5 px-3 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${activeTab === 'limits' ? 'bg-indigo-600 text-zinc-100 font-bold' : 'text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-200'}`}
+          className={`w-full p-2.5 px-3.5 rounded-xl flex items-center gap-2.5 cursor-pointer transition-all ${activeTab === 'limits' ? 'bg-indigo-600/90 text-zinc-100 font-bold shadow-lg shadow-indigo-600/10' : 'text-zinc-500 hover:bg-zinc-800/20 hover:text-zinc-300'}`}
         >
           <Sliders size={14} />
-          Outreach & Safety Limits
+          <span>Outreach Limits</span>
         </button>
 
         <button 
           onClick={() => setActiveTab('integrations')}
-          className={`w-full p-2.5 px-3 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${activeTab === 'integrations' ? 'bg-indigo-600 text-zinc-100 font-bold' : 'text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-200'}`}
+          className={`w-full p-2.5 px-3.5 rounded-xl flex items-center gap-2.5 cursor-pointer transition-all ${activeTab === 'integrations' ? 'bg-indigo-600/90 text-zinc-100 font-bold shadow-lg shadow-indigo-600/10' : 'text-zinc-500 hover:bg-zinc-800/20 hover:text-zinc-300'}`}
         >
           <Network size={14} />
-          Integrations & Webhooks
+          <span>Integrations Webhook</span>
         </button>
 
         <button 
           onClick={() => setActiveTab('billing')}
-          className={`w-full p-2.5 px-3 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${activeTab === 'billing' ? 'bg-indigo-600 text-zinc-100 font-bold' : 'text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-200'}`}
+          className={`w-full p-2.5 px-3.5 rounded-xl flex items-center gap-2.5 cursor-pointer transition-all ${activeTab === 'billing' ? 'bg-indigo-600/90 text-zinc-100 font-bold shadow-lg shadow-indigo-600/10' : 'text-zinc-500 hover:bg-zinc-800/20 hover:text-zinc-300'}`}
         >
           <CreditCard size={14} />
-          Billing & Seat Plan
+          <span>Billing & Seats</span>
         </button>
       </div>
 
       {/* Settings Content Panel */}
       <div className="flex-1 p-6 text-left">
         {activeTab === 'linkedin' && (
-          <form onSubmit={handleSaveLinkedInConfig} className="space-y-6 max-w-xl">
+          <div className="space-y-6">
             <div>
-              <h2 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">LinkedIn Profiles Connection</h2>
-              <p className="text-xs text-zinc-500 mt-1">Connect your LinkedIn profile using secure session tokens. This simulates a real browser environment securely using randomized headers and fingerprint profiles.</p>
+              <h2 className="text-sm font-bold text-zinc-100 uppercase tracking-wider flex items-center gap-2">
+                <Linkedin size={16} className="text-indigo-400" />
+                Multi-Account LinkedIn Core
+              </h2>
+              <p className="text-xs text-zinc-500 mt-1">Connect your team's LinkedIn or Sales Navigator accounts directly. Every crawler logs on using separate residential proxy networks to avoid overlapping footprint cookies.</p>
             </div>
 
-            <div className="p-4 bg-zinc-950/40 rounded-xl border border-zinc-800 flex items-center justify-between gap-4 text-xs">
-              <div className="flex items-center gap-2.5">
-                <img src={linkedinAccount.avatarUrl} alt={linkedinAccount.name} className="w-10 h-10 rounded-full object-cover ring-2 ring-indigo-500" />
-                <div>
-                  <h4 className="font-bold text-zinc-200">{linkedinAccount.name}</h4>
-                  <p className="text-[10px] text-zinc-500">{linkedinAccount.headline}</p>
-                </div>
-              </div>
-              <span className="text-[9px] px-2 py-0.5 bg-emerald-950 text-emerald-300 ring-1 ring-emerald-800 rounded-full font-semibold uppercase">Connected</span>
-            </div>
+            {/* Main column layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              
+              {/* Left Column: Form to Connect/Add a New LinkedIn Profile */}
+              <div className="lg:col-span-7 bg-zinc-950/20 border border-zinc-800/70 p-5 rounded-2xl space-y-4">
+                <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <PlusCircle size={14} className="text-emerald-500" />
+                  Connect New Profile
+                </h3>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs text-zinc-400 font-bold mb-1.5">LINKEDIN SESSION COOKIE (LI_AT) *</label>
-                <textarea 
-                  value={sessionCookie}
-                  onChange={e => setSessionCookie(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-mono h-20 resize-none leading-relaxed"
-                  placeholder="Paste li_at cookie token here..."
-                />
-                <span className="text-[10px] text-zinc-600 block mt-1 leading-relaxed">
-                  We use secure encrypted Local Storage state. NEVER share this token publicly. 
-                </span>
-              </div>
-
-              <div>
-                <label className="block text-xs text-zinc-400 font-bold mb-1.5">CUSTOM STATIC RESIDENTIAL PROXY IP</label>
-                <div className="flex gap-2">
-                  <input 
-                    type="text"
-                    required
-                    placeholder="e.g. US-West-1 (Premium residential) - 104.244.72.109"
-                    value={proxy}
-                    onChange={e => setProxy(e.target.value)}
-                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
-                  />
-                  <button 
-                    type="button"
-                    onClick={handleTestProxy}
-                    disabled={testingProxy}
-                    className="p-2 px-4 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 text-xs font-semibold rounded-xl border border-zinc-700/60 flex items-center gap-1.5 transition-all cursor-pointer"
-                  >
-                    {testingProxy && <RefreshCw size={12} className="animate-spin" />}
-                    Verify Proxy
-                  </button>
-                </div>
-
-                {proxyResult === 'success' && (
-                  <div className="mt-2.5 p-2 px-3 bg-emerald-950/20 border border-emerald-500/20 rounded-lg text-emerald-400 text-[11px] flex items-center gap-1.5">
-                    <CheckCircle size={13} />
-                    Proxy connectivity established successfully. Simulated location: Paris, France.
+                <form onSubmit={handleConnectNewAccount} className="space-y-3 text-xs text-left">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-zinc-500 font-bold mb-1 uppercase text-[9px]">Profile Full Name *</label>
+                      <input 
+                        type="text"
+                        required
+                        placeholder="e.g. Jessica Taylor"
+                        value={newName}
+                        onChange={e => setNewName(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-zinc-500 font-bold mb-1 uppercase text-[9px]">Connections Count</label>
+                      <input 
+                        type="number"
+                        placeholder="e.g. 1500"
+                        value={newConnections}
+                        onChange={e => setNewConnections(parseInt(e.target.value) || 0)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                    </div>
                   </div>
-                )}
+
+                  <div>
+                    <label className="block text-zinc-500 font-bold mb-1 uppercase text-[9px]">Professional headline</label>
+                    <input 
+                      type="text"
+                      placeholder="e.g. Director of Growth @ TechVantage | ex-HubSpot Recruiting"
+                      value={newHeadline}
+                      onChange={e => setNewHeadline(e.target.value)}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-zinc-200 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-500 font-bold mb-1 uppercase text-[9px]">Residential proxy node ip address</label>
+                    <input 
+                      type="text"
+                      required
+                      placeholder="e.g. US-West-2 (Premium Static Residential) - 67.215.102.18"
+                      value={newProxy}
+                      onChange={e => setNewProxy(e.target.value)}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-500 font-bold mb-1.5 uppercase text-[9px] flex items-center gap-1">
+                      LinkedIn Session Token (LI_AT) *
+                      <span className="text-[10px] text-indigo-400 font-normal lowercase">(li_at cookie)</span>
+                    </label>
+                    <textarea 
+                      required
+                      placeholder="Paste your actual li_at cookie value securely from your Chrome developer tools. Kept in secure local server_db."
+                      value={newCookie}
+                      onChange={e => setNewCookie(e.target.value)}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-zinc-300 font-mono h-16 resize-none focus:outline-none focus:border-indigo-500 leading-relaxed text-[10.5px]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-500 font-bold mb-1 uppercase text-[9px]">Profile Avatar URL</label>
+                    <div className="flex gap-2">
+                      <select 
+                        onChange={e => setNewAvatar(e.target.value)}
+                        className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-2 py-2 text-zinc-400 focus:outline-none"
+                      >
+                        <option value="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80">Corporate Woman representation</option>
+                        <option value="https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80">Executive corporate man representation</option>
+                        <option value="https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80">Recruiter corporate profile</option>
+                        <option value="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80">Alternative technical rep</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {formError && (
+                    <div className="p-2.5 bg-red-950/20 border border-red-500/20 rounded-xl text-red-400 text-[10px] flex items-center gap-2">
+                      <AlertCircle size={14} className="flex-shrink-0" />
+                      <span>{formError}</span>
+                    </div>
+                  )}
+
+                  {formSuccess && (
+                    <div className="p-2.5 bg-emerald-950/20 border border-emerald-500/20 rounded-xl text-emerald-400 text-[10.5px] flex items-center gap-2">
+                      <CheckCircle size={14} className="flex-shrink-0" />
+                      <span>{formSuccess}</span>
+                    </div>
+                  )}
+
+                  <button 
+                    type="submit"
+                    disabled={testingProxy}
+                    className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-zinc-100 rounded-xl font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {testingProxy ? (
+                      <>
+                        <RefreshCw size={13} className="animate-spin" />
+                        <span>Verifying Proxy Latency Node...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Linkedin size={13} />
+                        <span>Connect LinkedIn Profile & Residential Proxy</span>
+                      </>
+                    )}
+                  </button>
+                </form>
               </div>
+
+              {/* Right Column: List of currently connected accounts */}
+              <div className="lg:col-span-5 space-y-4">
+                <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <CheckCircle size={14} className="text-indigo-400" />
+                  Connected Accounts ({linkedinAccounts.length})
+                </h3>
+
+                <div className="space-y-3">
+                  {linkedinAccounts.map((acc) => (
+                    <div 
+                      key={acc.id}
+                      className={`p-4 bg-zinc-950/45 rounded-xl border transition-all ${
+                        acc.isActive 
+                          ? 'border-indigo-500/80 ring-2 ring-indigo-500/20 bg-zinc-900/40' 
+                          : 'border-zinc-800 hover:border-zinc-700 bg-zinc-950/20'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="flex gap-2.5">
+                          <img src={acc.avatarUrl} alt={acc.name} className="w-10 h-10 rounded-full object-cover ring-2 ring-zinc-800" />
+                          <div className="min-w-0">
+                            <h4 className="font-bold text-zinc-200 text-xs truncate">{acc.name}</h4>
+                            <p className="text-[10px] text-zinc-500 truncate mt-0.5">{acc.headline}</p>
+                            <span className="text-[10px] text-zinc-500 font-mono block mt-1">Conns: {acc.connectionsCount}</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-col items-end gap-1.5">
+                          {acc.isActive ? (
+                            <span className="text-[9px] px-1.5 py-0.5 bg-indigo-950 border border-indigo-700/50 text-indigo-300 rounded font-bold uppercase">Active</span>
+                          ) : (
+                            <button
+                              onClick={() => handleSetActiveAccount(acc.id)}
+                              className="text-[9px] px-2 py-1 hover:bg-zinc-800 text-zinc-400 bg-zinc-900 border border-zinc-800 rounded font-semibold cursor-pointer transition-colors"
+                            >
+                              Set Active
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Proxy node footer */}
+                      <div className="mt-3 pt-3 border-t border-zinc-800/80 flex items-center justify-between text-[10px] text-zinc-500 font-mono">
+                        <div className="flex items-center gap-1 truncate w-3/4">
+                          <Globe size={11} className="text-zinc-600 flex-shrink-0" />
+                          <span className="truncate">{acc.proxy}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-emerald-500 text-[9px] flex items-center gap-1 font-bold">
+                            <Check size={11} /> Ready
+                          </span>
+                          <button
+                            onClick={() => handleDeleteAccount(acc.id)}
+                            className="text-zinc-600 hover:text-red-400 transition-colors cursor-pointer"
+                            title="Disconnect LinkedIn Profile"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="p-3 bg-zinc-950/20 border border-zinc-800/50 rounded-xl text-[10.5px] text-zinc-500 leading-relaxed flex items-start gap-2">
+                  <Info size={14} className="text-indigo-400 mt-0.5 flex-shrink-0" />
+                  <p>Selecting <strong>Set Active</strong> updates the campaign sequencer immediately. Subsequent outbound and scraping pipeline steps will automatically use that LinkedIn session proxy pipeline.</p>
+                </div>
+              </div>
+
             </div>
 
-            <button 
-              type="submit"
-              className="p-2 px-5 bg-indigo-600 hover:bg-indigo-500 text-zinc-100 rounded-xl transition-all cursor-pointer text-xs font-bold"
-            >
-              Update Connected Account Configurations
-            </button>
-          </form>
+          </div>
         )}
 
         {/* Safety & Limits Configuration */}
         {activeTab === 'limits' && (
           <form onSubmit={handleSaveLimits} className="space-y-6 max-w-xl">
             <div>
-              <h2 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">Campaign Safety & Daily Rate Limits</h2>
-              <p className="text-xs text-zinc-500 mt-1">LinkedIn restricts outreach behavior to protect users. Dripify implements safety limits and human delays by mimicking typing speed, scrolling patterns, and natural breaks.</p>
+              <h2 className="text-sm font-bold text-zinc-100 uppercase tracking-wider flex items-center gap-2">
+                <Sliders size={16} className="text-indigo-400" />
+                Campaign Safety & Daily Rate Limits
+              </h2>
+              <p className="text-xs text-zinc-500 mt-1">LinkedIn restricts outreach behavior to protect users. skylan implements safety limits and human delays by mimicking typing speed, scrolling patterns, and natural breaks.</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-zinc-950/40 p-4 rounded-xl border border-zinc-800 text-xs">
-                <label className="block text-zinc-500 mb-1">Max Invites / Day</label>
+                <label className="block text-zinc-500 mb-1 font-semibold uppercase text-[9px]">Max Invites / Day</label>
                 <input 
                   type="number" 
                   max="100"
                   value={limits.invitesPerDay}
                   onChange={e => setLimits({...limits, invitesPerDay: parseInt(e.target.value) || 0})}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-zinc-200 font-mono text-center"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-zinc-200 font-mono text-center focus:outline-none focus:border-indigo-500"
                 />
                 <span className="text-[9px] text-zinc-600 block mt-1.5">Recommended max: 40/day</span>
               </div>
 
               <div className="bg-zinc-950/40 p-4 rounded-xl border border-zinc-800 text-xs">
-                <label className="block text-zinc-500 mb-1">Max Messages / Day</label>
+                <label className="block text-zinc-500 mb-1 font-semibold uppercase text-[9px]">Max Messages / Day</label>
                 <input 
                   type="number" 
                   max="200"
                   value={limits.messagesPerDay}
                   onChange={e => setLimits({...limits, messagesPerDay: parseInt(e.target.value) || 0})}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-zinc-200 font-mono text-center"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-zinc-200 font-mono text-center focus:outline-none focus:border-indigo-500"
                 />
                 <span className="text-[9px] text-zinc-600 block mt-1.5">Recommended max: 80/day</span>
               </div>
 
               <div className="bg-zinc-950/40 p-4 rounded-xl border border-zinc-800 text-xs">
-                <label className="block text-zinc-500 mb-1">Max Profile Views / Day</label>
+                <label className="block text-zinc-500 mb-1 font-semibold uppercase text-[9px]">Max Profile Views</label>
                 <input 
                   type="number" 
                   max="150"
                   value={limits.profileViewsPerDay}
                   onChange={e => setLimits({...limits, profileViewsPerDay: parseInt(e.target.value) || 0})}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-zinc-200 font-mono text-center"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-zinc-200 font-mono text-center focus:outline-none focus:border-indigo-500"
                 />
                 <span className="text-[9px] text-zinc-600 block mt-1.5">Recommended max: 50/day</span>
               </div>
@@ -252,21 +504,21 @@ export default function SettingsPanel({
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-zinc-500 mb-1">Typing/Loading sleep min (seconds)</label>
+                  <label className="block text-xs text-zinc-500 mb-1 text-[9px] uppercase font-bold">Typing/Loading sleep min (seconds)</label>
                   <input 
                     type="number" 
                     value={limits.humanDelayMinSec}
                     onChange={e => setLimits({...limits, humanDelayMinSec: parseInt(e.target.value) || 0})}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-300 text-xs"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-300 text-xs focus:outline-none focus:border-indigo-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-zinc-500 mb-1">Typing/Loading sleep max (seconds)</label>
+                  <label className="block text-xs text-zinc-500 mb-1 text-[9px] uppercase font-bold">Typing/Loading sleep max (seconds)</label>
                   <input 
                     type="number" 
                     value={limits.humanDelayMaxSec}
                     onChange={e => setLimits({...limits, humanDelayMaxSec: parseInt(e.target.value) || 0})}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-300 text-xs"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-300 text-xs focus:outline-none focus:border-indigo-500"
                   />
                 </div>
               </div>
@@ -280,7 +532,7 @@ export default function SettingsPanel({
             <button 
               type="submit"
               disabled={savingLimits}
-              className="p-2 px-5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-zinc-100 rounded-xl transition-all font-bold cursor-pointer text-xs"
+              className="p-2.5 px-5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-zinc-100 rounded-xl transition-all font-bold cursor-pointer text-xs"
             >
               {savingLimits ? "Saving Safeguards..." : "Commit Safety Safeguards"}
             </button>
@@ -291,105 +543,113 @@ export default function SettingsPanel({
         {activeTab === 'integrations' && (
           <form onSubmit={handleSaveIntegrations} className="space-y-6 max-w-xl">
             <div>
-              <h2 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">External CRM & Zapier Webhook syncs</h2>
-              <p className="text-xs text-zinc-500 mt-1">Dripify CRM streams deal conversions, message replies, and connection updates instantly into your favorite platforms.</p>
+              <h2 className="text-sm font-bold text-zinc-100 uppercase tracking-wider flex items-center gap-2">
+                <Network size={16} className="text-indigo-400" />
+                External CRM & Zapier Webhook syncs
+              </h2>
+              <p className="text-xs text-zinc-500 mt-1">skylan CRM streams deal conversions, message replies, and connection updates instantly into your favorite platforms.</p>
             </div>
 
             <div className="space-y-4 text-xs">
               <div>
-                <label className="block text-xs text-zinc-400 font-bold mb-1.5">ZAPIER TRIGGER INBOUND URL</label>
+                <label className="block text-xs text-zinc-400 font-bold mb-1.5 uppercase text-[9px]">ZAPIER TRIGGER INBOUND URL</label>
                 <input 
-                  type="url"
-                  placeholder="https://hooks.zapier.com/hooks/catch/..."
+                  type="text" 
                   value={zapierUrl}
                   onChange={e => setZapierUrl(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono"
+                  placeholder="https://hooks.zapier.com/hooks/catch/..."
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-zinc-400 font-bold mb-1.5">CUSTOM CRM WEBHOOK DISPATCH URL</label>
+                <label className="block text-xs text-zinc-400 font-bold mb-1.5 uppercase text-[9px]">CUSTOM RECEPTIVE WEBHOOK OUTFLOW</label>
                 <input 
-                  type="url"
-                  placeholder="https://yourdomain.com/webhooks/linkedin"
+                  type="text" 
                   value={customWebhookUrl}
                   onChange={e => setCustomWebhookUrl(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono"
+                  placeholder="https://yourcompany.com/webhooks/linkedin"
                 />
               </div>
 
-              <div className="space-y-2 pt-2">
-                <span className="block text-zinc-500 font-bold uppercase text-[9px] mb-2">Automated Integrations toggle</span>
-
-                <label className="flex items-center gap-2.5 text-zinc-300">
+              <div className="pt-2 text-left space-y-3">
+                <h3 className="font-semibold text-zinc-300 text-xs">Standard Synchronization Presets</h3>
+                
+                <label className="flex items-center gap-2.5 p-2 bg-zinc-950/20 border border-zinc-800 rounded-xl cursor-pointer hover:bg-zinc-800/10">
                   <input 
                     type="checkbox" 
                     checked={googleSync}
                     onChange={e => setGoogleSync(e.target.checked)}
-                    className="w-4 h-4 rounded text-indigo-600 focus:ring-0 bg-zinc-950 border-zinc-800"
+                    className="rounded border-zinc-800 bg-zinc-950 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
                   />
-                  <span>Automatically sync hot replies with Google Calendar schedule</span>
+                  <div>
+                    <span className="font-bold text-zinc-200 block text-xs">Auto Google Calendar Booking sync</span>
+                    <span className="text-[10px] text-zinc-500 block">Create events when leads reply with custom meeting pitches</span>
+                  </div>
                 </label>
 
-                <label className="flex items-center gap-2.5 text-zinc-300">
+                <label className="flex items-center gap-2.5 p-2 bg-zinc-950/20 border border-zinc-800 rounded-xl cursor-pointer hover:bg-zinc-800/10">
                   <input 
                     type="checkbox" 
                     checked={hubspotSync}
                     onChange={e => setHubspotSync(e.target.checked)}
-                    className="w-4 h-4 rounded text-indigo-600 focus:ring-0 bg-zinc-950 border-zinc-800"
+                    className="rounded border-zinc-800 bg-zinc-950 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
                   />
-                  <span>Automatically dispatch lead contact logs into HubSpot Sales Hub</span>
+                  <div>
+                    <span className="font-bold text-zinc-200 block text-xs">HubSpot CRM contact creation sync</span>
+                    <span className="text-[10px] text-zinc-500 block">Progress Hubspot deal pipe automatically on response</span>
+                  </div>
                 </label>
               </div>
+
             </div>
 
             <button 
               type="submit"
-              className="p-2 px-5 bg-indigo-600 hover:bg-indigo-500 text-zinc-100 rounded-xl transition-all cursor-pointer font-bold text-xs"
+              className="p-2.5 px-5 bg-indigo-600 hover:bg-indigo-500 text-zinc-100 rounded-xl font-bold transition-all text-xs cursor-pointer"
             >
-              Update External Webhooks Synced
+              Update Integrations Webhooks
             </button>
           </form>
         )}
 
-        {/* Saas Plan status and seat Billing options */}
+        {/* Billing Overview */}
         {activeTab === 'billing' && (
-          <div className="space-y-6 max-w-xl text-xs">
+          <div className="max-w-xl space-y-6">
             <div>
-              <h2 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">SaaS Active Plan and Billing Overview</h2>
-              <p className="text-xs text-zinc-500 mt-1">Check allocated seats, monthly connection limits, billing schedule, or upgrade premium capabilities.</p>
+              <h2 className="text-sm font-bold text-zinc-100 uppercase tracking-wider flex items-center gap-2">
+                <CreditCard size={16} className="text-indigo-400" />
+                Current Seat Plan & Subscription
+              </h2>
+              <p className="text-xs text-zinc-500 mt-1">Review active pipeline crawler licenses, invoice receipts, or tier caps.</p>
             </div>
 
-            <div className="p-6 bg-indigo-950/20 border border-indigo-500/20 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <span className="text-indigo-400 uppercase font-bold text-[9px]">ACTIVE PACKAGE</span>
-                <h3 className="text-zinc-100 font-black text-lg mt-0.5">Enterprise Unlimited Seat Platform</h3>
-                <p className="text-zinc-400 mt-1 leading-relaxed">Annual corporate billing. Sync up to 25 separate LinkedIn profiles with custom dedicated proxy IPs safely.</p>
-              </div>
-
-              <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 text-center font-mono">
-                <span className="text-zinc-500 block text-[9px] font-bold">COST</span>
-                <span className="text-xl font-bold text-zinc-200 block">$480/mo</span>
-                <span className="text-[9px] text-emerald-400 font-semibold block uppercase">PAID (May 2026)</span>
+            <div className="p-5 bg-gradient-to-br from-indigo-950/35 to-zinc-950 rounded-2xl border border-indigo-500/20 text-xs relative overflow-hidden">
+              <div className="absolute right-4 top-4 text-indigo-500/20 font-bold text-6xl">PRO</div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-zinc-300 font-bold">
+                  <span>Skylan Agency Pro Tier License</span>
+                  <span className="text-[9px] px-1.5 py-0.5 bg-indigo-500 text-white rounded-full font-bold">ACTIVE</span>
+                </div>
+                <div className="text-zinc-500">Auto renewal on: <strong className="font-mono text-zinc-300">June 25, 2026</strong></div>
+                <p className="text-zinc-400 py-1 leading-relaxed">Unlimited Outreach Sequences, 3 LinkedIn Profile Seats, fully isolated proxies with residential geo-pin, and unified CRM Inbox with Gemini-suggested replies.</p>
+                <div className="pt-2 flex items-center gap-4 text-zinc-400 font-mono text-[11px]">
+                  <div>Seats used: <strong className="text-zinc-200">{linkedinAccounts.length}/3</strong></div>
+                  <div>Monthly Cost: <strong className="text-indigo-400">$149/mo</strong></div>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 text-xs text-left">
-              <div className="bg-zinc-950/40 p-4 rounded-xl border border-zinc-800 space-y-2">
-                <span className="text-zinc-500 font-semibold tracking-wider block text-[10px]">SEAT USAGE</span>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-lg font-bold text-zinc-200">3 Active Seats</span>
-                  <span className="text-zinc-500">/ 25 Total Max</span>
-                </div>
-                <div className="w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-indigo-600 h-full rounded" style={{ width: '12%' }} />
-                </div>
+            <div className="space-y-2 text-xs">
+              <h3 className="font-bold text-zinc-400 uppercase tracking-wider text-[10px]">Upcoming receipts</h3>
+              <div className="bg-zinc-950/20 border border-zinc-800 rounded-xl p-3 flex justify-between items-center text-[11px] font-mono leading-none">
+                <span className="text-zinc-400">Invoice #SK-4902 (Pending June 25, 2026)</span>
+                <span className="text-zinc-200">$149.00 USD</span>
               </div>
-
-              <div className="bg-zinc-950/40 p-4 rounded-xl border border-zinc-800 space-y-2">
-                <span className="text-zinc-500 font-semibold tracking-wider block text-[10px]">NEXT RENEWAL TIMING</span>
-                <span className="text-lg font-bold text-zinc-200 block">January 15th, 2027</span>
-                <span className="text-[10px] text-zinc-400 block font-medium">Auto-renew active (Credit Card Card ended with *4084)</span>
+              <div className="bg-zinc-955/20 border border-zinc-800 rounded-xl p-3 flex justify-between items-center text-[11px] font-mono leading-none">
+                <span className="text-zinc-400">Invoice #SK-4720 (Paid May 25, 2026)</span>
+                <span className="text-zinc-400">Paid $149.00 USD</span>
               </div>
             </div>
           </div>

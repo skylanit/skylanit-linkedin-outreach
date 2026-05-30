@@ -2,6 +2,7 @@ import { LinkedInAccount, Campaign, Lead, ChatMessage, TeamMember, IntegrationSe
 
 // Mock initial data that can be saved in local state or updated
 export const initialLinkedInAccount: LinkedInAccount = {
+  id: "acc-1",
   connected: true,
   name: "Alex Mercer",
   avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
@@ -11,6 +12,7 @@ export const initialLinkedInAccount: LinkedInAccount = {
   proxy: "US-West-1 (Premium Shared Proxy) - 104.244.72.109",
   proxyStatus: 'verified',
   healthStatus: 'healthy',
+  isActive: true,
   rateLimits: {
     invitesPerDay: 40,
     messagesPerDay: 80,

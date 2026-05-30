@@ -4,6 +4,7 @@
  */
 
 export interface LinkedInAccount {
+  id: string;
   connected: boolean;
   name: string;
   avatarUrl: string;
@@ -13,6 +14,7 @@ export interface LinkedInAccount {
   proxy: string;
   proxyStatus: 'verified' | 'failed' | 'untested';
   healthStatus: 'healthy' | 'warning' | 'restricted' | 'disconnected';
+  isActive?: boolean;
   rateLimits: {
     invitesPerDay: number;
     messagesPerDay: number;
