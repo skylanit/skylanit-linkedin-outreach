@@ -287,11 +287,11 @@ export default function App() {
           {/* Brand/logo block */}
           <div className="flex items-center gap-2 px-3">
             <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-sm text-zinc-100 shadow-md">
-              D
+              S
             </div>
             <div>
               <span className="font-extrabold text-xs tracking-tight text-zinc-200">
-                Dripify <span className="text-zinc-500 font-medium text-[10px]">CRM v1.0</span>
+                skylan <span className="text-zinc-500 font-medium text-[10px]">CRM v1.0</span>
               </span>
             </div>
           </div>
