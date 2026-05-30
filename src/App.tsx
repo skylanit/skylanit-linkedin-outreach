@@ -87,6 +87,16 @@ export default function App() {
     teamMembers?: TeamMember[];
     integrations?: IntegrationSettings;
   }) => {
+    // Write instantly to localStorage cache to bypass stateless edge isolates
+    try {
+      const existingDbRaw = localStorage.getItem("skylan_local_db");
+      const existingDb = existingDbRaw ? JSON.parse(existingDbRaw) : {};
+      const nextDb = { ...existingDb, ...updates };
+      localStorage.setItem("skylan_local_db", JSON.stringify(nextDb));
+    } catch (e) {
+      console.warn("Storage write backup deferred:", e);
+    }
+
     fetch("/api/db/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -97,22 +107,59 @@ export default function App() {
   // 1. Load entire database state on first bootstrap mount
   React.useEffect(() => {
     const loadInitDB = () => {
+      // Prioritize local state restore instantly:
+      const cachedDbRaw = localStorage.getItem("skylan_local_db");
+      if (cachedDbRaw) {
+        try {
+          const db = JSON.parse(cachedDbRaw);
+          if (db.campaigns) setCampaigns(db.campaigns);
+          if (db.leads) setLeads(db.leads);
+          if (db.chatMessages) setChatMessages(db.chatMessages);
+          if (db.teamMembers) setTeamMembers(db.teamMembers);
+          if (db.integrations) setIntegrations(db.integrations);
+          if (db.accounts) {
+            setLinkedinAccounts(db.accounts);
+            const active = db.accounts.find((a: any) => a.isActive) || db.accounts[0];
+            if (active) {
+              setLinkedinAccount(active);
+            }
+          }
+          if (localStorage.getItem("skylan_onboarding_completed") === "true") {
+            setShowLanding(false);
+            setIsOnboarding(false);
+          }
+          setIsLoading(false);
+        } catch (e) {
+          console.warn("Could not restore cached DB snapshot:", e);
+        }
+      }
+
       fetch("/api/db/get")
         .then(res => res.json())
         .then(db => {
           if (db) {
-            if (db.campaigns) setCampaigns(db.campaigns);
-            if (db.leads) setLeads(db.leads);
-            if (db.chatMessages) setChatMessages(db.chatMessages);
-            if (db.teamMembers) setTeamMembers(db.teamMembers);
-            if (db.integrations) setIntegrations(db.integrations);
-            if (db.accounts) {
-              setLinkedinAccounts(db.accounts);
-              const active = db.accounts.find((a: any) => a.isActive) || db.accounts[0];
+            // Merge with local state to ensure no loss of connected profiles
+            const latestCached = localStorage.getItem("skylan_local_db");
+            const cached = latestCached ? JSON.parse(latestCached) : {};
+            const mergedDb = { ...cached, ...db };
+            localStorage.setItem("skylan_local_db", JSON.stringify(mergedDb));
+
+            if (mergedDb.campaigns) setCampaigns(mergedDb.campaigns);
+            if (mergedDb.leads) setLeads(mergedDb.leads);
+            if (mergedDb.chatMessages) setChatMessages(mergedDb.chatMessages);
+            if (mergedDb.teamMembers) setTeamMembers(mergedDb.teamMembers);
+            if (mergedDb.integrations) setIntegrations(mergedDb.integrations);
+            if (mergedDb.accounts) {
+              setLinkedinAccounts(mergedDb.accounts);
+              const active = mergedDb.accounts.find((a: any) => a.isActive) || mergedDb.accounts[0];
               if (active) {
                 setLinkedinAccount(active);
               }
             }
+          }
+          if (localStorage.getItem("skylan_onboarding_completed") === "true") {
+            setShowLanding(false);
+            setIsOnboarding(false);
           }
           setIsLoading(false);
         })
@@ -131,6 +178,26 @@ export default function App() {
         .then(res => res.json())
         .then(db => {
           if (db) {
+            // Prevent server recycling default "Alex Mercer" from wiping user-onboarded profile
+            const clientDbRaw = localStorage.getItem("skylan_local_db");
+            if (clientDbRaw) {
+              const clientDb = JSON.parse(clientDbRaw);
+              const customAccount = clientDb.accounts?.find((a: any) => a.id.startsWith("acc-oauth-") || a.id.startsWith("acc-fresh-") || a.id.startsWith("acc-demo-"));
+              const serverHasCustomAccount = db.accounts?.some((a: any) => a.id.startsWith("acc-oauth-") || a.id.startsWith("acc-fresh-") || a.id.startsWith("acc-demo-"));
+              
+              if (customAccount && !serverHasCustomAccount) {
+                console.info("Re-syncing client database to recycled worker isolate...");
+                fetch("/api/db/save", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(clientDb)
+                }).catch(err => console.error("Could not sync state to server db:", err));
+                return;
+              }
+            }
+
+            localStorage.setItem("skylan_local_db", JSON.stringify(db));
+
             if (db.campaigns) setCampaigns(db.campaigns);
             if (db.leads) setLeads(db.leads);
             if (db.chatMessages) setChatMessages(db.chatMessages);
@@ -146,7 +213,6 @@ export default function App() {
           }
         })
         .catch(err => {
-          // Suppress false-alarm error logs during development hot-reloads
           if (err && (err.message === "Failed to fetch" || err.name === "TypeError")) {
             console.warn("Retrying background snapshot sync with Skylan node...");
           } else {
@@ -395,13 +461,68 @@ export default function App() {
     return (
       <OnboardingGate 
         onCompleted={(ownerName) => {
+          localStorage.setItem("skylan_onboarding_completed", "true");
           setIsOnboarding(false);
+          
+          // Restore from cached localStorage first for instantaneous transition!
+          const cachedDbRaw = localStorage.getItem("skylan_local_db");
+          if (cachedDbRaw) {
+            try {
+              const db = JSON.parse(cachedDbRaw);
+              if (db.campaigns) setCampaigns(db.campaigns);
+              if (db.leads) setLeads(db.leads);
+              if (db.chatMessages) setChatMessages(db.chatMessages);
+              if (db.teamMembers) setTeamMembers(db.teamMembers);
+              if (db.integrations) setIntegrations(db.integrations);
+              if (db.accounts) {
+                setLinkedinAccounts(db.accounts);
+                const active = db.accounts.find((a: any) => a.isActive) || db.accounts[0];
+                if (active) {
+                  setLinkedinAccount(active);
+                }
+              }
+            } catch (e) {
+              console.error("Failed to parse cached local db during transition:", e);
+            }
+          }
+
           setIsLoading(true);
           // Refetch database state directly so we immediately transition with the generated custom industry dataset!
           fetch("/api/db/get")
             .then(res => res.json())
             .then(db => {
               if (db) {
+                const latestCached = localStorage.getItem("skylan_local_db");
+                if (latestCached) {
+                  const cached = JSON.parse(latestCached);
+                  const customAccount = cached.accounts?.find((a: any) => a.id.startsWith("acc-oauth-") || a.id.startsWith("acc-fresh-") || a.id.startsWith("acc-demo-"));
+                  const serverHasCustomAccount = db.accounts?.some((a: any) => a.id.startsWith("acc-oauth-") || a.id.startsWith("acc-fresh-") || a.id.startsWith("acc-demo-"));
+                  
+                  if (customAccount && !serverHasCustomAccount) {
+                    console.info("Onboarding fetch server re-syncing local copy...");
+                    fetch("/api/db/save", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: latestCached
+                    }).catch(err => console.error("Could not sync state to server db:", err));
+
+                    if (cached.campaigns) setCampaigns(cached.campaigns);
+                    if (cached.leads) setLeads(cached.leads);
+                    if (cached.chatMessages) setChatMessages(cached.chatMessages);
+                    if (cached.teamMembers) setTeamMembers(cached.teamMembers);
+                    if (cached.integrations) setIntegrations(cached.integrations);
+                    if (cached.accounts) {
+                      setLinkedinAccounts(cached.accounts);
+                      const active = cached.accounts.find((a: any) => a.isActive) || cached.accounts[0];
+                      if (active) {
+                        setLinkedinAccount(active);
+                      }
+                    }
+                    setIsLoading(false);
+                    return;
+                  }
+                }
+
                 if (db.campaigns) setCampaigns(db.campaigns);
                 if (db.leads) setLeads(db.leads);
                 if (db.chatMessages) setChatMessages(db.chatMessages);
@@ -490,7 +611,11 @@ export default function App() {
           </div>
 
           <button 
-            onClick={() => setShowLanding(true)}
+            onClick={() => {
+              localStorage.removeItem("skylan_onboarding_completed");
+              localStorage.removeItem("skylan_local_db");
+              setShowLanding(true);
+            }}
             className="w-full p-1.5 px-3 hover:bg-zinc-800/10 hover:text-red-400 text-zinc-500 rounded-lg text-[10.5px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5"
           >
             <LogOut size={13} />

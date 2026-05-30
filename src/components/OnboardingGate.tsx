@@ -138,6 +138,10 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
 
       const data = await response.json();
       if (data.status === 'success') {
+        if (data.db) {
+          localStorage.setItem("skylan_local_db", JSON.stringify(data.db));
+        }
+        localStorage.setItem("skylan_onboarding_completed", "true");
         setVerifyingStage(4); // Success launch state
         setSimulatedLogs(prev => [
           ...prev,
