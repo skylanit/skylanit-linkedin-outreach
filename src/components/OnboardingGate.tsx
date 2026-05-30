@@ -357,8 +357,13 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
                     <span className="text-[9.5px] text-[#7059FF] font-bold flex items-center gap-1">✓ Recommended</span>
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-zinc-900 uppercase tracking-wide">Official OAuth sign in</h4>
-                    <p className="text-[11px] text-zinc-500 leading-relaxed mt-1">Authenticates directly on LinkedIn secure servers. Safely imports your name and profile details into your target leads dashboard without storing passwords.</p>
+                    <h4 className="text-xs font-bold text-zinc-900 uppercase tracking-wide">Official LinkedIn OAuth</h4>
+                    <p className="text-[11px] text-zinc-500 leading-relaxed mt-1">
+                      Authenticates directly on LinkedIn secure servers.
+                    </p>
+                    <div className="mt-2 bg-indigo-50 border border-indigo-100/50 p-2.5 rounded-lg text-[10.5px] text-indigo-950 font-medium leading-relaxed">
+                      💡 <strong>Custom Live Domain Info:</strong> Since you have hosted this app on Cloudflare Pages, your live site URL requires you to register your own custom LinkedIn Developer App to authorize successfully. Feel free to use the button below to bypass OAuth instantly for your preview!
+                    </div>
                   </div>
 
                   <button
@@ -373,6 +378,29 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
                       <Linkedin size={13} />
                     )}
                     <span>Authorize with official LinkedIn account</span>
+                  </button>
+                </div>
+
+                {/* METHOD B: Sandbox Demo Profile Seed (Offline Mode Bypass) */}
+                <div className="p-5 bg-zinc-50 border border-zinc-200/80 rounded-2xl text-left space-y-3 shadow-none">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] bg-zinc-650 text-white font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider">Simulated Bypass</span>
+                    <span className="text-[10px] text-zinc-500 font-semibold font-mono">Instant Test Drive</span>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-zinc-800 uppercase tracking-wide">Launch with Sandbox Demo</h4>
+                    <p className="text-[11px] text-zinc-500 leading-relaxed mt-1">
+                      Skip registering a LinkedIn Developer Portal app on your custom Cloudflare domain. Instantly seed a realistic B2B sandbox workspace matching your pitch target.
+                    </p>
+                  </div>
+                  
+                  <button
+                    type="button"
+                    onClick={() => handleOAuthConnectionSuccessful(ownerName || "Alex Mercer")}
+                    className="w-full py-3 px-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer text-center"
+                  >
+                    <Sliders size={13} />
+                    <span>Launch Sandbox Demo Account (Bypass OAuth)</span>
                   </button>
                 </div>
 

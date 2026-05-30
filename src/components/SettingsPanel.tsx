@@ -371,7 +371,11 @@ export default function SettingsPanel({
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-zinc-150 uppercase tracking-wide">Sign in with LinkedIn</h4>
-                    <p className="text-[11px] text-zinc-500 leading-relaxed mt-1">Authenticates directly on LinkedIn secure servers. Safely imports profile data without risking passwords or generating security checkpoint codes.</p>
+                    <p className="text-[11px] text-zinc-500 leading-relaxed mt-1">Authenticates directly on LinkedIn secure servers. Safely imports profile data.</p>
+                    
+                    <div className="mt-2.5 bg-[#4F46E5]/10 border border-[#4F46E5]/20 p-2.5 rounded-lg text-[10px] text-zinc-300 leading-relaxed font-sans">
+                      💡 <strong>Custom Domain Notice:</strong> If you are hosted on your live Cloudflare Pages URL and get a <code>redirect_uri mismatch</code> error from LinkedIn, it is because you need to register your custom live site domain in your own LinkedIn Developer Portal application. You can add simulated sandbox accounts below to bypass this during testing!
+                    </div>
                   </div>
                   
                   <button
@@ -383,6 +387,55 @@ export default function SettingsPanel({
                     <Linkedin size={13} />
                     <span>Authorize LinkedIn Profile</span>
                   </button>
+
+                  <div className="pt-2 border-t border-zinc-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onUpdateAccounts) {
+                          const demoNames = [
+                            "Mila Kowalski", "Marcus Drake", "Sonia Patel", "David Vance"
+                          ];
+                          const avatars = [
+                            "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+                            "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+                            "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
+                            "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80"
+                          ];
+                          const idx = Math.floor(Math.random() * demoNames.length);
+                          const randName = demoNames[idx];
+                          const randAvatar = avatars[idx];
+                          
+                          const newDemoAcc: LinkedInAccount = {
+                            id: `acc-demo-${Date.now()}`,
+                            connected: true,
+                            name: randName,
+                            avatarUrl: randAvatar,
+                            headline: "Enterprise Director / GTM SaaS Strategist",
+                            connectionsCount: Math.floor(Math.random() * 3000) + 1000,
+                            sessionCookie: "mock-session-cookie",
+                            proxy: "US-West-1 (Premium static Residential) - 45.123.88.9",
+                            proxyStatus: "verified",
+                            healthStatus: "healthy",
+                            isActive: false,
+                            rateLimits: {
+                              invitesPerDay: 40,
+                              messagesPerDay: 80,
+                              profileViewsPerDay: 50,
+                              humanDelayMinSec: 30,
+                              humanDelayMaxSec: 120
+                            }
+                          };
+                          onUpdateAccounts([...linkedinAccounts, newDemoAcc]);
+                          setFormSuccess(`Instantly generated and connected simulated Sandbox profile: ${randName}!`);
+                        }
+                      }}
+                      className="w-full py-2 px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-[10.5px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer text-center"
+                    >
+                      <Sliders size={12} className="text-zinc-500" />
+                      <span>Simulate & Seed Sandbox Profile</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
