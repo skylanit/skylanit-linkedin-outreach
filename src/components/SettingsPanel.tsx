@@ -180,6 +180,46 @@ export default function SettingsPanel({
     });
   };
 
+  const handleConnectOAuth = async () => {
+    setFormError('');
+    setFormSuccess('');
+    setTestingProxy(true);
+    try {
+      const res = await fetch("/api/auth/linkedin/url");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "LinkedIn OAuth 2.0 configuration variables are not set yet. Please check the step-by-step developer portal instructions below.");
+      }
+      const { url } = await res.json();
+      const width = 600;
+      const height = 700;
+      const left = window.screen.width / 2 - width / 2;
+      const top = window.screen.height / 2 - height / 2;
+      const popup = window.open(
+        url,
+        "linkedin_oauth",
+        `width=${width},height=${height},top=${top},left=${left}`
+      );
+      if (!popup) {
+        setFormError("Popup was blocked! Please allow popups for Skylan to authenticate with LinkedIn.");
+      }
+    } catch (error: any) {
+      setFormError(error.message);
+    } finally {
+      setTestingProxy(false);
+    }
+  };
+
+  React.useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'LINKEDIN_OAUTH_SUCCESS') {
+        setFormSuccess(`Connected '${event.data.name}' successfully via LinkedIn OAuth 2.0!`);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
   const handleSaveLimits = (e: React.FormEvent) => {
     e.preventDefault();
     setSavingLimits(true);
@@ -258,13 +298,70 @@ export default function SettingsPanel({
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               
               {/* Left Column: Form to Connect/Add a New LinkedIn Profile */}
-              <div className="lg:col-span-7 bg-zinc-950/20 border border-zinc-800/70 p-5 rounded-2xl space-y-4">
-                <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <PlusCircle size={14} className="text-emerald-500" />
-                  Connect New Profile
-                </h3>
+              <div className="lg:col-span-7 bg-zinc-950/20 border border-zinc-800/70 p-5 rounded-2xl space-y-5 font-sans animate-fade-in">
+                <div>
+                  <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <PlusCircle size={14} className="text-emerald-500" />
+                    Connect New Profile
+                  </h3>
+                  <p className="text-[10px] text-zinc-500 mt-0.5">Expand your outreach scope using secure OAuth 2.0 or cookie proxies.</p>
+                </div>
 
-                <form onSubmit={handleConnectNewAccount} className="space-y-3 text-xs text-left">
+                {formError && (
+                  <div className="p-2.5 bg-red-950/20 border border-red-500/20 rounded-xl text-red-400 text-[10px] flex items-center gap-2">
+                    <AlertCircle size={14} className="flex-shrink-0" />
+                    <span>{formError}</span>
+                  </div>
+                )}
+
+                {formSuccess && (
+                  <div className="p-2.5 bg-emerald-950/20 border border-emerald-500/10 rounded-xl text-emerald-400 text-[10.5px] flex items-center gap-2">
+                    <CheckCircle size={14} className="flex-shrink-0" />
+                    <span>{formSuccess}</span>
+                  </div>
+                )}
+
+                {/* METHOD A: Official OAuth Connection */}
+                <div className="p-4 bg-zinc-900/40 rounded-xl border border-zinc-850/60 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] bg-indigo-500/15 text-indigo-400 font-extrabold px-2 py-0.5 rounded uppercase tracking-wider">Method A: Official Auth</span>
+                    <span className="text-[9px] text-indigo-400 font-bold flex items-center gap-1 font-mono">✓ High Connection Health</span>
+                  </div>
+                  <div>
+                    <h4 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wide">Sign in with LinkedIn</h4>
+                    <p className="text-[10px] text-zinc-500 leading-relaxed mt-1">Authenticates directly on LinkedIn servers. Safely imports profile data without risking passwords or generating security checkpoint codes.</p>
+                  </div>
+                  
+                  <button
+                    type="button"
+                    onClick={handleConnectOAuth}
+                    disabled={testingProxy}
+                    className="w-full py-2.5 px-3 bg-[#0274b3] hover:bg-[#026399] disabled:opacity-50 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-[#0274b3]/10 text-center"
+                  >
+                    <Linkedin size={13} />
+                    <span>Authorize LinkedIn Profile</span>
+                  </button>
+                </div>
+
+                {/* Divider */}
+                <div className="flex items-center gap-3 text-zinc-700">
+                  <div className="flex-1 h-[1px] bg-zinc-800"></div>
+                  <span className="text-[9px] font-bold uppercase tracking-wider">or</span>
+                  <div className="flex-1 h-[1px] bg-zinc-800"></div>
+                </div>
+
+                {/* METHOD B: Automation Cookie */}
+                <div className="space-y-2.5 pt-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] bg-purple-500/15 text-purple-400 font-extrabold px-2 py-0.5 rounded uppercase tracking-wider">Method B: Session automation</span>
+                    <span className="text-[9px] text-purple-400 font-bold font-mono">Dripify Premium Mode</span>
+                  </div>
+                  <div>
+                    <h4 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wide">Enter Session Cookie (LI_AT)</h4>
+                    <p className="text-[10px] text-zinc-500 leading-relaxed mt-1">Required for performing background campaign sequence crawling, auto connection requests, and advanced chat inbox crawling.</p>
+                  </div>
+
+                  <form onSubmit={handleConnectNewAccount} className="space-y-3 text-xs text-left">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-zinc-500 font-bold mb-1 uppercase text-[9px]">Profile Full Name *</label>
@@ -341,19 +438,7 @@ export default function SettingsPanel({
                     </div>
                   </div>
 
-                  {formError && (
-                    <div className="p-2.5 bg-red-950/20 border border-red-500/20 rounded-xl text-red-400 text-[10px] flex items-center gap-2">
-                      <AlertCircle size={14} className="flex-shrink-0" />
-                      <span>{formError}</span>
-                    </div>
-                  )}
-
-                  {formSuccess && (
-                    <div className="p-2.5 bg-emerald-950/20 border border-emerald-500/20 rounded-xl text-emerald-400 text-[10.5px] flex items-center gap-2">
-                      <CheckCircle size={14} className="flex-shrink-0" />
-                      <span>{formSuccess}</span>
-                    </div>
-                  )}
+                  {/* Alerts shifted globally to the top to support both Method A and Method B */}
 
                   <button 
                     type="submit"
@@ -373,6 +458,7 @@ export default function SettingsPanel({
                     )}
                   </button>
                 </form>
+                </div>
               </div>
 
               {/* Right Column: List of currently connected accounts */}

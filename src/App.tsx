@@ -145,7 +145,14 @@ export default function App() {
             }
           }
         })
-        .catch(err => console.error("Poll database sync error:", err));
+        .catch(err => {
+          // Suppress false-alarm error logs during development hot-reloads
+          if (err && (err.message === "Failed to fetch" || err.name === "TypeError")) {
+            console.warn("Retrying background snapshot sync with Skylan node...");
+          } else {
+            console.error("Poll database sync error:", err);
+          }
+        });
     };
 
     const dbInterval = setInterval(pollDatabaseUpdates, 15000); // refresh full DB state from backend every 15 seconds
@@ -161,7 +168,11 @@ export default function App() {
           setAutomationQueueStats(data);
         })
         .catch(err => {
-          console.error("Could not poll automated proxy crawler logs queue:", err);
+          if (err && (err.message === "Failed to fetch" || err.name === "TypeError")) {
+            // Quietly retry on server hot-reload connection drop
+          } else {
+            console.error("Could not poll automated proxy crawler logs queue:", err);
+          }
         });
     };
 

@@ -47,6 +47,92 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
   const [submittingOtp, setSubmittingOtp] = React.useState(false);
   const [errorText, setErrorText] = React.useState('');
   const [simulatedLogs, setSimulatedLogs] = React.useState<string[]>([]);
+  const [testingOAuth, setTestingOAuth] = React.useState(false);
+
+  const handleConnectOAuth = async () => {
+    setErrorText('');
+    setTestingOAuth(true);
+    try {
+      const res = await fetch("/api/auth/linkedin/url");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "LinkedIn OAuth 2.0 configuration variables are not set yet. Please check default client ID & secret parameter listings.");
+      }
+      const { url } = await res.json();
+      const width = 600;
+      const height = 700;
+      const left = window.screen.width / 2 - width / 2;
+      const top = window.screen.height / 2 - height / 2;
+      const popup = window.open(
+        url,
+        "linkedin_oauth",
+        `width=${width},height=${height},top=${top},left=${left}`
+      );
+      if (!popup) {
+        setErrorText("Popup was blocked! Please allow popups for Skylan to authenticate with LinkedIn.");
+      }
+    } catch (error: any) {
+      setErrorText(error.message);
+    } finally {
+      setTestingOAuth(false);
+    }
+  };
+
+  const handleOAuthConnectionSuccessful = async (profileName: string) => {
+    setErrorText('');
+    setStep(3);
+    setVerifyingStage(3); // skip simulated credential logs because it's a real connected profile!
+    setSimulatedLogs([
+      `[${new Date().toLocaleTimeString()}] ✓ LinkedIn Direct OAuth 2.0 connection validated!`,
+      `[${new Date().toLocaleTimeString()}] Authenticated profile: ${profileName}`,
+      `[${new Date().toLocaleTimeString()}] Initiating secure campaign workspace build with Gemini...`
+    ]);
+
+    const activeIndustry = targetIndustry === 'custom' ? customIndustry : targetIndustry;
+
+    try {
+      const response = await fetch("/api/linkedin/onboard-custom-boost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ownerName,
+          ownerEmail,
+          targetIndustry: activeIndustry,
+          isOAuth: true,
+          oauthName: profileName,
+          oauthAvatar: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80"
+        })
+      });
+
+      const data = await response.json();
+      if (data.status === 'success') {
+        setVerifyingStage(4); // Success launch state
+        setSimulatedLogs(prev => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] ✓ Successfully hydrated realistic ${activeIndustry} leads, sequencing steps, and historical messages!`,
+          `[${new Date().toLocaleTimeString()}] Workspace ready.`
+        ]);
+      } else {
+        setStep(2);
+        setVerifyingStage(0);
+        setErrorText(data.error || "Failed to finalize customized LinkedIn sequence onboarding.");
+      }
+    } catch (err: any) {
+      setStep(2);
+      setVerifyingStage(0);
+      setErrorText("A localized network timeout occurred during database synthesis: " + (err.message || err));
+    }
+  };
+
+  React.useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'LINKEDIN_OAUTH_SUCCESS') {
+        handleOAuthConnectionSuccessful(event.data.name);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [ownerName, ownerEmail, targetIndustry, customIndustry]);
 
   const industryChoices = [
     "Software Founders & Tech CTOs",
@@ -306,81 +392,134 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
             </div>
           )}
 
-          {/* STEP 2: Pure High-Fidelity Dripify-style Login matching the user's screenshot */}
+          {/* STEP 2: Dual Connection Gate (Secure OAuth + Sandbox Tunnel fallback) */}
           {step === 2 && (
-            <div className="space-y-6 max-w-xl mx-auto">
+            <div className="space-y-5 max-w-xl mx-auto">
               
               {/* Main Title Center */}
-              <h1 className="text-3xl font-bold tracking-tight text-zinc-900 mt-2 font-sans" style={{ fontSize: '32px' }}>
-                Enter LinkedIn details
-              </h1>
+              <div className="text-center">
+                <span className="text-[10px] bg-[#7059FF]/10 text-[#7059FF] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">Secure Authorization</span>
+                <h1 className="text-3xl font-bold tracking-tight text-zinc-950 mt-2 font-sans" style={{ fontSize: '32px' }}>
+                  Connect LinkedIn Profile
+                </h1>
+                <p className="text-slate-500 leading-relaxed text-[12.5px] mt-1.5 max-w-md mx-auto">
+                  Authorizing your profile seeds your pipeline container with real campaigns, targeted leads, and simulated automation logs matching your niche.
+                </p>
+              </div>
 
-              {/* Center Informative Description Paragraph */}
-              <p className="text-slate-500 leading-relaxed text-[13px] text-center max-w-xl mx-auto px-1">
-                Your LinkedIn credentials are encrypted and required to perform automated actions in the background. We do not have direct access to or control over your LinkedIn account, and you can deactivate this connection at any time in your settings
-              </p>
+              {errorText && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-xs flex items-center gap-2 max-w-md mx-auto text-left animate-fade-in">
+                  <AlertCircle size={14} className="flex-shrink-0" />
+                  <span>{errorText}</span>
+                </div>
+              )}
 
-              {/* Form container */}
-              <form onSubmit={handleStartSimulatedSequence} className="space-y-4 pt-4 text-left max-w-md mx-auto" noValidate>
+              <div className="max-w-md mx-auto space-y-4">
                 
-                {/* Email Field Panel */}
-                <div className="space-y-1">
-                  <input 
-                    type="email" 
-                    placeholder="LinkedIn email *"
-                    value={linkedinEmail}
-                    onChange={e => {
-                      setLinkedinEmail(e.target.value);
-                      if (e.target.value) setEmailError(false);
-                    }}
-                    className={`w-full bg-white border rounded-xl px-4 py-3.5 text-zinc-800 placeholder-slate-400 text-sm focus:outline-none transition-all ${
-                      emailError 
-                        ? 'border-red-500 focus:ring-1 focus:ring-red-200' 
-                        : 'border-slate-200 focus:border-[#7059FF]'
-                    }`}
-                  />
-                  {emailError && (
-                    <p className="text-red-500 text-[11px] font-sans pl-1">
-                      The field is required
-                    </p>
-                  )}
-                </div>
+                {/* METHOD A: Direct LinkedIn Secure OAuth */}
+                <div className="p-5 bg-[#7059FF]/5 border border-[#7059FF]/20 rounded-2xl text-left space-y-3 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9.5px] bg-[#7059FF] text-white font-extrabold px-2 py-0.5 rounded uppercase tracking-wider">Method A: Secure Handshake</span>
+                    <span className="text-[9.5px] text-[#7059FF] font-bold flex items-center gap-1">✓ Recommended</span>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-zinc-900 uppercase tracking-wide">Official OAuth sign in</h4>
+                    <p className="text-[11px] text-zinc-500 leading-relaxed mt-1">Authenticates directly on LinkedIn secure servers. Safely imports your name and profile details into your target leads dashboard without storing passwords.</p>
+                  </div>
 
-                {/* Password Field Panel */}
-                <div className="space-y-1">
-                  <input 
-                    type="password" 
-                    placeholder="LinkedIn password *"
-                    value={linkedinPassword}
-                    onChange={e => {
-                      setLinkedinPassword(e.target.value);
-                      if (e.target.value) setPasswordError(false);
-                    }}
-                    className={`w-full bg-white border rounded-xl px-4 py-3.5 text-zinc-800 placeholder-slate-400 text-sm focus:outline-none transition-all ${
-                      passwordError 
-                        ? 'border-red-500 focus:ring-1 focus:ring-red-200' 
-                        : 'border-slate-200 focus:border-[#7059FF]'
-                    }`}
-                  />
-                  {passwordError && (
-                    <p className="text-red-500 text-[11px] font-sans pl-1">
-                      The field is required
-                    </p>
-                  )}
-                </div>
-
-                {/* Button Container aligned to screenshot */}
-                <div className="pt-2">
-                  <button 
-                    type="submit"
-                    className="w-full bg-[#7059FF] hover:bg-[#5C45EA] text-white py-3.5 rounded-xl text-sm font-semibold transition-all shadow-md active:scale-[0.99] flex items-center justify-center cursor-pointer font-sans"
+                  <button
+                    type="button"
+                    onClick={handleConnectOAuth}
+                    disabled={testingOAuth}
+                    className="w-full py-3 px-4 bg-[#0274b3] hover:bg-[#026399] disabled:opacity-50 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md text-center"
                   >
-                    Sign in to LinkedIn
+                    {testingOAuth ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Linkedin size={13} />
+                    )}
+                    <span>Authorize with official LinkedIn account</span>
                   </button>
                 </div>
 
+                {/* Nice Divider */}
+                <div className="flex items-center gap-3 text-zinc-400">
+                  <div className="flex-1 h-[1px] bg-zinc-200"></div>
+                  <span className="text-[9px] font-bold uppercase tracking-wider">or simulation mode</span>
+                  <div className="flex-1 h-[1px] bg-zinc-200"></div>
+                </div>
+
+                {/* METHOD B: Sandbox simulation tunnel form */}
+                <div className="p-5 bg-white border border-zinc-200/90 rounded-2xl text-left space-y-3.5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9.5px] bg-zinc-100 text-zinc-500 font-extrabold px-2 py-0.5 rounded uppercase tracking-wider">Method B: Sandbox proxy</span>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-zinc-800 uppercase tracking-wide">Simulation Credentials (residential tunnel)</h4>
+                    <p className="text-[11.5px] text-zinc-500 leading-relaxed mt-1">Don't have OAuth tokens? Log in with email credentials below to trigger Skylan's interactive sequence and residential IP browser simulation checks.</p>
+                  </div>
+
+                  <form onSubmit={handleStartSimulatedSequence} className="space-y-3" noValidate>
+                    {/* Email Field Panel */}
+                    <div className="space-y-1">
+                      <input 
+                        type="email" 
+                        placeholder="LinkedIn email *"
+                        value={linkedinEmail}
+                        onChange={e => {
+                          setLinkedinEmail(e.target.value);
+                          if (e.target.value) setEmailError(false);
+                        }}
+                        className={`w-full bg-white border rounded-xl px-3.5 py-2.5 text-zinc-800 placeholder-slate-400 text-xs focus:outline-none transition-all ${
+                          emailError 
+                            ? 'border-red-500 focus:ring-1 focus:ring-red-200' 
+                            : 'border-slate-200 focus:border-[#7059FF]'
+                        }`}
+                      />
+                      {emailError && (
+                        <p className="text-red-500 text-[10px] font-sans pl-1">
+                          The field is required
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Password Field Panel */}
+                    <div className="space-y-1">
+                      <input 
+                        type="password" 
+                        placeholder="LinkedIn password *"
+                        value={linkedinPassword}
+                        onChange={e => {
+                          setLinkedinPassword(e.target.value);
+                          if (e.target.value) setPasswordError(false);
+                        }}
+                        className={`w-full bg-white border rounded-xl px-3.5 py-2.5 text-zinc-800 placeholder-slate-400 text-xs focus:outline-none transition-all ${
+                          passwordError 
+                            ? 'border-red-500 focus:ring-1 focus:ring-red-200' 
+                            : 'border-slate-200 focus:border-[#7059FF]'
+                        }`}
+                      />
+                      {passwordError && (
+                        <p className="text-red-500 text-[10px] font-sans pl-1">
+                          The field is required
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Button Container aligned to screenshot */}
+                    <div className="pt-1.5">
+                      <button 
+                        type="submit"
+                        className="w-full bg-zinc-900 hover:bg-zinc-800 text-white py-2.5 rounded-xl text-xs font-semibold transition-all shadow-md active:scale-[0.99] flex items-center justify-center cursor-pointer font-sans"
+                      >
+                        Start sandbox proxy sequence
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
                 {/* Back Link to Step 1 */}
-                <div className="text-center pt-2">
+                <div className="text-center pt-1">
                   <button 
                     type="button"
                     onClick={() => setStep(1)}
@@ -391,7 +530,7 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
                   </button>
                 </div>
 
-              </form>
+              </div>
             </div>
           )}
 

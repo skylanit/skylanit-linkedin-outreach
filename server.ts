@@ -555,12 +555,196 @@ app.post("/api/accounts/test-proxy", (req, res) => {
   }, 1000);
 });
 
+const getRedirectUri = (req: any) => {
+  const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+  const cleanBase = baseUrl.replace(/\/+$/, "");
+  return `${cleanBase}/api/auth/linkedin/callback`;
+};
+
+// Initiate LinkedIn OAuth 2.0 flow
+app.get("/api/auth/linkedin/url", (req, res) => {
+  const clientId = process.env.LINKEDIN_CLIENT_ID;
+  if (!clientId) {
+    return res.status(400).json({ 
+      error: "LINKEDIN_CLIENT_ID environment variable is missing on this workspace. Please set it in Settings -> Secrets in AI Studio." 
+    });
+  }
+
+  const redirectUri = getRedirectUri(req);
+  const state = Math.random().toString(36).substring(2, 15);
+
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    state: state,
+    scope: "openid profile email"
+  });
+
+  const authUrl = `https://www.linkedin.com/oauth/v2/authorization?${params.toString()}`;
+  res.json({ url: authUrl });
+});
+
+// LinkedIn OAuth 2.0 Callback endpoint
+app.get(["/api/auth/linkedin/callback", "/api/auth/linkedin/callback/"], async (req, res) => {
+  const { code, error, error_description } = req.query;
+
+  if (error) {
+    console.error("LinkedIn OAuth redirect error:", error_description);
+    return res.send(`
+      <html>
+        <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; background: #09090b; color: #f4f4f5; margin: 0;">
+          <div style="text-align: center; border: 1px solid #27272a; padding: 2rem; border-radius: 1rem; background: #18181b; max-width: 480px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+            <h3 style="color: #ef4444; margin-top: 0;">OAuth Connection Failed</h3>
+            <p style="font-size: 13px; color: #a1a1aa; line-height: 1.6;">${error_description || error}</p>
+            <button onclick="window.close()" style="background: #3f3f46; color: #fff; border: 0; padding: 0.5rem 1rem; border-radius: 0.5rem; cursor: pointer; margin-top: 1rem; font-weight: 600;">Close Window</button>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+
+  if (!code) {
+    return res.status(400).send("Authorization code missing from LinkedIn redirection query.");
+  }
+
+  const clientId = process.env.LINKEDIN_CLIENT_ID;
+  const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    return res.status(500).send("LINKEDIN_CLIENT_ID or LINKEDIN_CLIENT_SECRET is missing on the server environment.");
+  }
+
+  try {
+    const redirectUri = getRedirectUri(req);
+
+    // Exchange Code for Access Token
+    const params = new URLSearchParams({
+      grant_type: "authorization_code",
+      code: code as string,
+      redirect_uri: redirectUri,
+      client_id: clientId,
+      client_secret: clientSecret
+    });
+
+    const tokenResponse = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString()
+    });
+
+    if (!tokenResponse.ok) {
+      const errBody = await tokenResponse.text();
+      throw new Error(`LinkedIn Token exchange failed: ${errBody}`);
+    }
+
+    const tokenData: any = await tokenResponse.json();
+    const accessToken = tokenData.access_token;
+
+    // Fetch user profile info
+    const userinfoResponse = await fetch("https://api.linkedin.com/v2/userinfo", {
+      headers: { "Authorization": `Bearer ${accessToken}` }
+    });
+
+    let profileName = "LinkedIn User";
+    let email = "oauth-user@linkedin.com";
+    let avatarUrl = "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80";
+    let headline = "LinkedIn Professional (OAuth Authenticated)";
+
+    if (userinfoResponse.ok) {
+      const userInfo: any = await userinfoResponse.json();
+      profileName = `${userInfo.given_name || ""} ${userInfo.family_name || ""}`.trim() || profileName;
+      email = userInfo.email || email;
+      avatarUrl = userInfo.picture || avatarUrl;
+    }
+
+    // Connect this new account to stateful database!
+    const db = readDB();
+    if (!db.accounts) db.accounts = [];
+
+    const newAccountId = `acc-oauth-${Date.now()}`;
+    const newAccount = {
+      id: newAccountId,
+      connected: true,
+      name: profileName,
+      avatarUrl: avatarUrl,
+      headline: headline,
+      connectionsCount: 500,
+      sessionCookie: "oauth-authenticated-token",
+      proxy: "Direct OAuth Connected (No proxy node required)",
+      proxyStatus: "verified",
+      healthStatus: "healthy",
+      isActive: true,
+      rateLimits: {
+        invitesPerDay: 40,
+        messagesPerDay: 80,
+        profileViewsPerDay: 50,
+        humanDelayMinSec: 45,
+        humanDelayMaxSec: 180
+      }
+    };
+
+    // Deactivate previous active profiles
+    db.accounts.forEach((acc: any) => { acc.isActive = false; });
+    db.accounts.push(newAccount);
+
+    db.automationLogs.push({
+      timestamp: new Date().toISOString(),
+      level: "success",
+      message: `LinkedIn Profile '${profileName}' successfully linked via OAuth 2.0!`
+    });
+
+    writeDB(db);
+
+    res.send(`
+      <html>
+        <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; background: #09090b; color: #f4f4f5; margin: 0;">
+          <div style="text-align: center; border: 1px solid #27272a; padding: 2.5rem; border-radius: 1rem; background: #18181b; max-width: 450px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+            <div style="color: #22c55e; font-size: 40px; margin-bottom: 0.5rem; line-height: 1;">✓</div>
+            <h3 style="color: #22c55e; margin-top: 0;">Connection Successful!</h3>
+            <p style="font-size: 13px; color: #a1a1aa; line-height: 1.6;">Your LinkedIn account <strong>${profileName}</strong> is now securely connected to Skylan.</p>
+            <p style="font-size: 11px; color: #71717a; margin-top: 1.5rem;">This window will close automatically shortly.</p>
+            <script>
+              setTimeout(() => {
+                if (window.opener) {
+                  window.opener.postMessage({ type: 'LINKEDIN_OAUTH_SUCCESS', name: "${profileName}" }, '*');
+                  window.close();
+                } else {
+                  window.location.href = '/';
+                }
+              }, 2500);
+            </script>
+          </div>
+        </body>
+      </html>
+    `);
+
+  } catch (err: any) {
+    console.error("LinkedIn OAuth Exchange error:", err);
+    res.status(500).send(`
+      <html>
+        <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; background: #09090b; color: #f4f4f5; margin: 0;">
+          <div style="text-align: center; border: 1px solid #27272a; padding: 2rem; border-radius: 1rem; background: #18181b; max-width: 480px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+            <h3 style="color: #ef4444; margin-top: 0;">Exchange Handshake Failed</h3>
+            <p style="font-size: 13px; color: #a1a1aa; line-height: 1.6;">${err.message || "An unexpected network error occurred."}</p>
+            <button onclick="window.close()" style="background: #3f3f46; color: #fff; border: 0; padding: 0.5rem 1rem; border-radius: 0.5rem; cursor: pointer; margin-top: 1rem; font-weight: 600;">Close Window</button>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+});
+
 // Custom realistic onboarding LinkedIn login & tailored dataset generator using Gemini
 app.post("/api/linkedin/onboard-custom-boost", async (req, res) => {
-  const { ownerName, ownerEmail, linkedinEmail, targetIndustry } = req.body;
+  const { ownerName, ownerEmail, linkedinEmail, targetIndustry, isOAuth, oauthName, oauthAvatar } = req.body;
 
-  if (!ownerName || !linkedinEmail || !targetIndustry) {
-    return res.status(400).json({ error: "Required onboarding parameters missing (Full Name, LinkedIn Email, Target Industry/Profession)." });
+  if (!ownerName || !targetIndustry) {
+    return res.status(400).json({ error: "Required onboarding parameters missing (Full Name, Target Industry/Profession)." });
+  }
+
+  if (!isOAuth && !linkedinEmail) {
+    return res.status(400).json({ error: "Required LinkedIn login parameters missing." });
   }
 
   const systemInstruction = "You are an advanced B2B lead generation database builder. Populate high-converting real-looking outreach sequences, targeted prospects, and conversation replies tailored to a target industry or audience niche. Return pristine, valid JSON matching the exact schema provided. Do not include markdown tags or backticks.";
@@ -664,14 +848,14 @@ Return the JSON structure strictly formatted to match this schema:
     // 1. Setup the active real connected user account properties
     const userProxy = "US-West-2 (Premium Static Residential) - 67.215.102.18";
     const primaryAccount = {
-      id: "acc-user-primary",
+      id: isOAuth ? `acc-oauth-${Date.now()}` : "acc-user-primary",
       connected: true,
-      name: ownerName,
-      avatarUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80",
+      name: isOAuth ? (oauthName || ownerName) : ownerName,
+      avatarUrl: isOAuth ? (oauthAvatar || "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80") : "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80",
       headline: `${targetIndustry} Lead Acquisition Lead | Executive Strategy`,
       connectionsCount: 1640,
-      sessionCookie: `li_at=AQEDATk72_8C82BMAAABkr_${Math.random().toString(36).substring(2)}_extracted; li_rm=AQEDATk_extracted;`,
-      proxy: userProxy,
+      sessionCookie: isOAuth ? "oauth-authenticated-token" : `li_at=AQEDATk72_8C82BMAAABkr_${Math.random().toString(36).substring(2)}_extracted; li_rm=AQEDATk_extracted;`,
+      proxy: isOAuth ? "Direct OAuth Connected (No proxy node required)" : userProxy,
       proxyStatus: "verified",
       healthStatus: "healthy",
       isActive: true,
