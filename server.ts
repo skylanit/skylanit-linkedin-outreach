@@ -626,8 +626,8 @@ app.get(["/api/auth/linkedin/status", "/api/connect/li/status"], (req, res) => {
   });
 });
 
-// Secure code exchange POST route for client-side routing fallback compatibility
-app.post(["/api/auth/linkedin/exchange", "/api/connect/li/exchange"], async (req, res) => {
+// Secure code exchange POST route for client-side routing fallback compatibility (supports trailing slash)
+app.post(["/api/auth/linkedin/exchange", "/api/auth/linkedin/exchange/", "/api/connect/li/exchange", "/api/connect/li/exchange/"], async (req, res) => {
   try {
     const { code, state: stateParam } = req.body;
 

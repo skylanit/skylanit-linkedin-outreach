@@ -584,8 +584,8 @@ export const onRequest = async (context: any) => {
       });
     }
 
-    // DX. OAUTH: LinkedIn Secure Post Exchange route for client-side routing fallback compatibility
-    if ((path === "/api/auth/linkedin/exchange" || path === "/api/connect/li/exchange") && method === "POST") {
+    // DX. OAUTH: LinkedIn Secure Post Exchange route for client-side routing fallback compatibility (supports trailing slash)
+    if ((path === "/api/auth/linkedin/exchange" || path === "/api/auth/linkedin/exchange/" || path === "/api/connect/li/exchange" || path === "/api/connect/li/exchange/") && method === "POST") {
       try {
         const body: any = await context.request.json();
         const { code, state: stateParam } = body;
