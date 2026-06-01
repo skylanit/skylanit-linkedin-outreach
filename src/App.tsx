@@ -58,7 +58,13 @@ import {
 } from './data';
 
 export default function App() {
-  const [showLanding, setShowLanding] = React.useState(true);
+  const [showLanding, setShowLanding] = React.useState(() => {
+    try {
+      return localStorage.getItem("skylan_onboarding_completed") !== "true";
+    } catch (e) {
+      return true;
+    }
+  });
   const [isOnboarding, setIsOnboarding] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<string>('dashboard');
 
@@ -454,7 +460,15 @@ export default function App() {
   };
 
   if (showLanding) {
-    return <LandingPage onEnterApp={() => { setShowLanding(false); setIsOnboarding(true); }} />;
+    return (
+      <LandingPage 
+        onEnterApp={() => {
+          const isCompleted = localStorage.getItem("skylan_onboarding_completed") === "true";
+          setShowLanding(false);
+          setIsOnboarding(!isCompleted);
+        }} 
+      />
+    );
   }
 
   if (isOnboarding) {

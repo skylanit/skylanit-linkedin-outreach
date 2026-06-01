@@ -954,7 +954,8 @@ Return the JSON structure strictly formatted to match this schema:
     res.json({
       status: "success",
       message: "LinkedIn authentication handshaked and user database enriched with tailored B2B assets.",
-      account: primaryAccount
+      account: primaryAccount,
+      db: db
     });
   } catch (err: any) {
     console.error("Tailored dataset generation error:", err);
