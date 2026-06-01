@@ -925,6 +925,313 @@ app.get(["/api/auth/linkedin/callback", "/api/auth/linkedin/callback/", "/api/co
   }
 });
 
+function generateProceduralDataset(targetIndustry: string) {
+  const normalized = targetIndustry.toLowerCase();
+  
+  // Custom templates and details based on industry selection
+  let campaign1Name = `Decision Makers in ${targetIndustry}`;
+  let campaign2Name = `Warm Outbound Escalation: ${targetIndustry}`;
+  
+  let step1Template = `Hi {{firstName}}, love your focus at {{company}}. Would love to compare notes on scaling B2B outreach in our fields. Let's connect!`;
+  let step2Template = `Thanks for connecting {{firstName}}! Are you guys currently experiencing any bottlenecks in acquiring qualified pipelines for {{company}}? We have been seeing 2x meetings booked.`;
+  
+  let lead1Name = "Sarah Jenkins";
+  let lead1Title = `VP of Growth & Pipeline`;
+  let lead1Company = "ScaleFlow Media";
+  let lead1Location = "San Francisco, USA";
+  let lead1Notes = "Requested a case study on B2B campaign response rates.";
+  let lead1Reply = "Hey! Thanks for the connection request. Curious to see how you achieve 2x booking rates. Do you have a quick case study or a 1-pager?";
+  
+  let lead2Name = "Alexander Hoffman";
+  let lead2Title = `Director of Acquisitions`;
+  let lead2Company = "Apex Capital Group";
+  let lead2Location = "Austin, USA";
+  let lead2Notes = "Highly active in direct acquisition pipelines.";
+  let lead2Msg = "Hi Alexander, custom intro sent. Let me know if you would be open to chat.";
+
+  let lead3Name = "Elena Rostova";
+  let lead3Title = `Chief Executive Officer`;
+  let lead3Company = "Nova Ventures";
+  let lead3Location = "Miami, USA";
+  let lead3Notes = "Agreed to calendar invite for this upcoming Thursday at 2PM.";
+  let lead3Reply = "Let's do it. Thursday at 2 PM works. Here's my direct coordinate or send a calendar invite.";
+
+  let lead4Name = "Marcus Thorne";
+  let lead4Title = `Product Line Architect`;
+  let lead4Company = "CoreSystems Inc";
+  let lead4Location = "Chicago, USA";
+  let lead4Notes = "Imported candidate lead. Preparing automated sequence campaign profile view.";
+
+  if (normalized.includes("founder") || normalized.includes("cto") || normalized.includes("software")) {
+    campaign1Name = `Tech Founders & High-Growth CTOs`;
+    step1Template = `Hi {{firstName}}, respect your technical scale at {{company}}. We've been analyzing software workflow pipelines. Let's connect!`;
+    step2Template = `Thanks for connecting {{firstName}}! Out of curiosity, which tech stack/orchestrator is {{company}} using to sync core pipeline tasks under heavy load? We built a zero-latency client.`;
+    
+    lead1Name = "Dave MacLeod";
+    lead1Title = "Co-Founder & CTO";
+    lead1Company = "HyperThread Solutions";
+    lead1Location = "Seattle, USA";
+    lead1Notes = "Very curious about our zero-latency pipeline engine. Asked if it supports TypeScript integration.";
+    lead1Reply = "Hey! Interesting value prop on zero-latency sync. Does your system support native TypeScript and custom SDK overrides right out of the box?";
+    
+    lead3Name = "Clara Vance";
+    lead3Title = "VP of Technical Infrastructure";
+    lead3Company = "Synapse AI";
+    lead3Location = "Boston, USA";
+    lead3Notes = "Booking confirmed for technical demo session on Friday 10 AM.";
+    lead3Reply = "Sounds like what we are building. Send me a calendar invite for Friday 10 AM EST - clara@synapse.ai.";
+  } else if (normalized.includes("e-commerce") || normalized.includes("brand") || normalized.includes("digital")) {
+    campaign1Name = `DTC Founders & E-Commerce Brand Owners`;
+    step1Template = `Hi {{firstName}}, your digital brand looks magnificent. Keen on tracking DTC growth tactics. Let's connect!`;
+    step2Template = `Thanks for connecting {{firstName}}! Are you primarily acquiring clients for {{company}} via paid traffic or direct organic outreach sequences? We helped a brand scale to $140k MRR.`;
+    
+    lead1Name = "Gabriella Silva";
+    lead1Title = "Founder & Creative Principal";
+    lead1Company = "LuxeSkin Labs";
+    lead1Location = "Los Angeles, USA";
+    lead1Notes = "Interested in our direct outreach strategies. Asked for a reference brand.";
+    lead1Reply = "Hello! Love the outreach. We are running mostly Meta Ads currently, but seeking organic scale. Do you have examples of fashion/wellness brands you worked with?";
+    
+    lead3Name = "Ben Thompson";
+    lead3Title = "eCom Marketing Lead";
+    lead3Company = "BrewBottle Mug";
+    lead3Location = "Denver, USA";
+    lead3Notes = "Agreed to review our DTC outreach playbook on a call next Wednesday.";
+    lead3Reply = "This is timely as we are preparing Q4 campaigns. Let's have a brief call next Wednesday at 3 PM.";
+  } else if (normalized.includes("venture") || normalized.includes("angel") || normalized.includes("investor") || normalized.includes("capital")) {
+    campaign1Name = `Venture Capitalists & Angel Partners`;
+    step1Template = `Hi {{firstName}}, great focus on early-stage founders. Love to connect and share high-potential dealflows.`;
+    step2Template = `Hi {{firstName}}, do you guys currently look at SaaS scaling workflows or toolings at {{company}}? Happy to send a pitch stack.`;
+    
+    lead1Name = "Arjun Mehta";
+    lead1Title = "Investment Partner";
+    lead1Company = "WestCoast Ventures";
+    lead1Location = "Silicon Valley, USA";
+    lead1Notes = "Requested the platform overview presentation and user metrics document.";
+    lead1Reply = "Hi, useful thesis. Send over your pitch deck and current metrics. We invest in early-stage SaaS workflow structures.";
+  }
+
+  return {
+    campaigns: [
+      {
+        id: "camp_gen_1",
+        name: campaign1Name,
+        status: "active",
+        leadsCount: 2,
+        acceptanceRate: 72,
+        replyRate: 44,
+        conversionRate: 20,
+        stats: {
+          invitesSent: 120,
+          invitesAccepted: 86,
+          messagesSent: 86,
+          repliesReceived: 38,
+          emailsSent: 0,
+          profilesViewed: 154
+        },
+        createdAt: new Date().toISOString().split('T')[0],
+        steps: [
+          { id: "step_gen_1_1", type: "visit_profile", delayDays: 0, messageTemplate: "" },
+          { id: "step_gen_1_2", type: "send_invite", delayDays: 1, messageTemplate: step1Template },
+          { id: "step_gen_1_3", type: "wait", delayDays: 2, messageTemplate: "" },
+          { id: "step_gen_1_4", type: "send_message", delayDays: 0, messageTemplate: step2Template }
+        ]
+      },
+      {
+        id: "camp_gen_2",
+        name: campaign2Name,
+        status: "paused",
+        leadsCount: 2,
+        acceptanceRate: 58,
+        replyRate: 25,
+        conversionRate: 10,
+        stats: {
+          invitesSent: 50,
+          invitesAccepted: 29,
+          messagesSent: 29,
+          repliesReceived: 7,
+          emailsSent: 15,
+          profilesViewed: 70
+        },
+        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString().split('T')[0],
+        steps: [
+          { id: "step_gen_2_1", type: "visit_profile", delayDays: 0, messageTemplate: "" },
+          { id: "step_gen_2_2", type: "send_invite", delayDays: 1, messageTemplate: `Hi {{firstName}}, noticed you look after business development at {{company}}. Let's connect.` },
+          { id: "step_gen_2_3", type: "wait", delayDays: 2, messageTemplate: "" },
+          { id: "step_gen_2_4", type: "send_message", delayDays: 0, messageTemplate: `Hey {{firstName}}, sent an invite earlier. Hope we can explore synergies across ${targetIndustry} soon.` }
+        ]
+      }
+    ],
+    leads: [
+      {
+        id: "lead_gen_1",
+        campaignId: "camp_gen_1",
+        campaignName: campaign1Name,
+        name: lead1Name,
+        title: `${lead1Title} @ ${lead1Company}`,
+        company: lead1Company,
+        location: lead1Location,
+        linkedinUrl: `https://www.linkedin.com/in/${lead1Name.toLowerCase().replace(/\s+/g, '-')}/`,
+        email: `info@${lead1Company.toLowerCase().replace(/\s+/g, '')}.com`,
+        avatarUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80",
+        stage: "replied",
+        tags: ["Hot Lead", "High Intent"],
+        notes: lead1Notes,
+        lastInteractionAt: new Date().toISOString(),
+        activities: [
+          { id: `act_g_1`, type: "import", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 4).toISOString(), description: "Lead discovered via targeted Search queries" },
+          { id: `act_g_2`, type: "visit", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(), description: "Simulated browser node profile visit" },
+          { id: `act_g_3`, type: "invite_sent", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(), description: "LinkedIn outreach invitation sent" },
+          { id: `act_g_4`, type: "invite_accepted", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 1).toISOString(), description: "Accepted connection request" },
+          { id: `act_g_5`, type: "message_sent", timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(), description: "Automated sequence prompt message triggered" },
+          { id: `act_g_6`, type: "reply_received", timestamp: new Date().toISOString(), description: `Received message: "${lead1Reply.substring(0, 40)}..."` }
+        ]
+      },
+      {
+        id: "lead_gen_2",
+        campaignId: "camp_gen_1",
+        campaignName: campaign1Name,
+        name: lead2Name,
+        title: `${lead2Title} @ ${lead2Company}`,
+        company: lead2Company,
+        location: lead2Location,
+        linkedinUrl: `https://www.linkedin.com/in/${lead2Name.toLowerCase().replace(/\s+/g, '-')}/`,
+        email: `contact@${lead2Company.toLowerCase().replace(/\s+/g, '')}.com`,
+        avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+        stage: "connected",
+        tags: ["Sequence Active"],
+        notes: lead2Notes,
+        lastInteractionAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+        activities: [
+          { id: `act_g_7`, type: "import", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 4).toISOString(), description: "Lead discovered" },
+          { id: `act_g_8`, type: "visit", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(), description: "Residential node navigated profile" },
+          { id: `act_g_9`, type: "invite_sent", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(), description: "Connection request transmitted successfully" },
+          { id: `act_g_10`, type: "invite_accepted", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), description: "Accepted our invitation" }
+        ]
+      },
+      {
+        id: "lead_gen_3",
+        campaignId: "camp_gen_1",
+        campaignName: campaign1Name,
+        name: lead3Name,
+        title: `${lead3Title} @ ${lead3Company}`,
+        company: lead3Company,
+        location: lead3Location,
+        linkedinUrl: `https://www.linkedin.com/in/${lead3Name.toLowerCase().replace(/\s+/g, '-')}/`,
+        email: `elena@${lead3Company.toLowerCase().replace(/\s+/g, '')}.com`,
+        avatarUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
+        stage: "converted",
+        tags: ["Meeting Scheduled", "Partner Track"],
+        notes: lead3Notes,
+        lastInteractionAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+        activities: [
+          { id: `act_g_11`, type: "import", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(), description: "Lead imported from high-integrity B2B filters" },
+          { id: `act_g_12`, type: "visit", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 4).toISOString(), description: "Completed humanized profile scan" },
+          { id: `act_g_13`, type: "invite_sent", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(), description: "Connection request sent" },
+          { id: `act_g_14`, type: "invite_accepted", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(), description: "Accepted connection" },
+          { id: `act_g_15`, type: "message_sent", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 1).toISOString(), description: "Sequence template message send" },
+          { id: `act_g_16`, type: "reply_received", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(), description: "Replied requesting schedule" },
+          { id: `act_g_17`, type: "message_sent", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(), description: "Calendar coordinate booking page sent" },
+          { id: `act_g_18`, type: "reply_received", timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(), description: "Confirmed Thursday scheduling" }
+        ]
+      },
+      {
+        id: "lead_gen_4",
+        campaignId: "camp_gen_2",
+        campaignName: campaign2Name,
+        name: lead4Name,
+        title: `${lead4Title} @ ${lead4Company}`,
+        company: lead4Company,
+        location: lead4Location,
+        linkedinUrl: `https://www.linkedin.com/in/${lead4Name.toLowerCase().replace(/\s+/g, '-')}/`,
+        email: `contact@${lead4Company.toLowerCase().replace(/\s+/g, '')}.com`,
+        avatarUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
+        stage: "imported",
+        tags: ["Niche Lead"],
+        notes: lead4Notes,
+        lastInteractionAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+        activities: [
+          { id: `act_g_19`, type: "import", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(), description: "Prospect auto-matched and imported directly to CRM Workspace" }
+        ]
+      }
+    ],
+    chatMessages: [
+      {
+        id: "chat_g_msg_1",
+        leadId: "lead_gen_1",
+        sender: "user",
+        text: `Hi ${lead1Name.split(' ')[0]}, let's connect and compare notes on B2B campaigns!`,
+        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+        channel: "linkedin",
+        read: true
+      },
+      {
+        id: "chat_g_msg_2",
+        leadId: "lead_gen_1",
+        sender: "user",
+        text: `Thanks for connecting ${lead1Name.split(' ')[0]}! Out of curiosity, are you guys experiencing bottlenecks scale-booking qualified campaigns at ${lead1Company}? We are seeing huge 2x rate hikes.`,
+        timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
+        channel: "linkedin",
+        read: true
+      },
+      {
+        id: "chat_g_msg_3",
+        leadId: "lead_gen_1",
+        sender: "lead",
+        text: lead1Reply,
+        timestamp: new Date().toISOString(),
+        channel: "linkedin",
+        read: false
+      },
+      {
+        id: "chat_g_msg_4",
+        leadId: "lead_gen_3",
+        sender: "user",
+        text: `Hi ${lead3Name.split(' ')[0]}, amazing DTC pipeline focus there at ${lead3Company}. Let's discuss synergies.`,
+        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(),
+        channel: "linkedin",
+        read: true
+      },
+      {
+        id: "chat_g_msg_5",
+        leadId: "lead_gen_3",
+        sender: "user",
+        text: `Thanks for connecting! Are you looking at direct outreach sequences to scale your premium acquisition threads? We see incredible interest.`,
+        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 1).toISOString(),
+        channel: "linkedin",
+        read: true
+      },
+      {
+        id: "chat_g_msg_6",
+        leadId: "lead_gen_3",
+        sender: "lead",
+        text: `Yes, we are exploring sequence scales right now. What's your booking look like? We can do a quick call to check templates.`,
+        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
+        channel: "linkedin",
+        read: true
+      },
+      {
+        id: "chat_g_msg_7",
+        leadId: "lead_gen_3",
+        sender: "user",
+        text: `Absolutely! Here's our calendar sync link or send over any specific slot that works.`,
+        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
+        channel: "linkedin",
+        read: true
+      },
+      {
+        id: "chat_g_msg_8",
+        leadId: "lead_gen_3",
+        sender: "lead",
+        text: lead3Reply,
+        timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+        channel: "linkedin",
+        read: true
+      }
+    ]
+  };
+}
+
 // Custom realistic onboarding LinkedIn login & tailored dataset generator using Gemini
 app.post("/api/linkedin/onboard-custom-boost", async (req, res) => {
   const { ownerName, ownerEmail, linkedinEmail, targetIndustry, isOAuth, oauthName, oauthAvatar } = req.body;
@@ -1028,10 +1335,16 @@ Return the JSON structure strictly formatted to match this schema:
   ]
 }`;
 
+  let payload: any;
   try {
-    const rawResult = await askGemini(boostPrompt, systemInstruction, dbBoostSchema);
-    const cleanJson = rawResult.replace(/```json/gi, "").replace(/```/g, "").trim();
-    const payload = JSON.parse(cleanJson);
+    try {
+      const rawResult = await askGemini(boostPrompt, systemInstruction, dbBoostSchema);
+      const cleanJson = rawResult.replace(/```json/gi, "").replace(/```/g, "").trim();
+      payload = JSON.parse(cleanJson);
+    } catch (apiErr: any) {
+      console.warn("Tailored dataset generation via Gemini failed or timed out, loading custom procedural dataset...", apiErr);
+      payload = generateProceduralDataset(targetIndustry);
+    }
 
     const db = readDB();
 

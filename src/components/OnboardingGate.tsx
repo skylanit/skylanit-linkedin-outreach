@@ -155,6 +155,18 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
         })
       });
 
+      if (!response.ok) {
+        const text = await response.text();
+        let errMsg = "Failed to finalize customized LinkedIn sequence onboarding.";
+        try {
+          const parsed = JSON.parse(text);
+          errMsg = parsed.error || errMsg;
+        } catch (e) {
+          errMsg = text || errMsg;
+        }
+        throw new Error(errMsg);
+      }
+
       const data = await response.json();
       if (data.status === 'success') {
         if (data.db) {
