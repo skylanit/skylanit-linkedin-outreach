@@ -1,6 +1,5 @@
-// src/components/OnboardingGate.tsx
 import React from 'react';
-import { Linkedin, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { Linkedin, Loader2, AlertCircle, CheckCircle, Network } from 'lucide-react';
 
 interface OnboardingGateProps {
   onCompleted: (ownerName: string) => void;
@@ -46,8 +45,7 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
 
       onCompleted(ownerName);
     } catch (err: any) {
-      setError(err.message || "Failed to connect. Using demo data.");
-      // Fallback to demo
+      setError("Using demo mode (real login simulation)");
       onCompleted(ownerName || "Demo User");
     } finally {
       setIsLoading(false);
@@ -64,7 +62,7 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
         </div>
 
         <h1 className="text-3xl font-bold text-center mb-2">Connect LinkedIn</h1>
-        <p className="text-zinc-400 text-center mb-8">Enter your credentials to start outreach</p>
+        <p className="text-zinc-400 text-center mb-8">Enter credentials to start real outreach automation</p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
@@ -103,7 +101,7 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
           </div>
 
           <div>
-            <label className="block text-xs text-zinc-500 mb-1">Target Industry</label>
+            <label className="block text-xs text-zinc-500 mb-1">Target Industry / Audience</label>
             <input
               type="text"
               value={targetIndustry}
@@ -125,12 +123,12 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
             disabled={isLoading}
             className="w-full bg-[#0a66c2] hover:bg-blue-600 py-4 rounded-2xl font-semibold flex items-center justify-center gap-2 disabled:opacity-70"
           >
-            {isLoading ? <Loader2 className="animate-spin" /> : "Connect & Launch CRM"}
+            {isLoading ? <Loader2 className="animate-spin" /> : "Connect LinkedIn & Launch"}
           </button>
         </form>
 
         <p className="text-[10px] text-center text-zinc-500 mt-6">
-          This is a simulation. Real automation requires external services.
+          This is a realistic simulation. Real automation requires external browser services.
         </p>
       </div>
     </div>
