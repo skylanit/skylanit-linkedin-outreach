@@ -589,6 +589,18 @@ app.post("/api/accounts/test-proxy", (req, res) => {
 const getRedirectUri = (req: any, isNewPath = true) => {
   const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
   const cleanBase = baseUrl.replace(/\/+$/, "");
+  
+  if (
+    cleanBase.includes("run.app") || 
+    cleanBase.includes("localhost") || 
+    cleanBase.includes("3000") || 
+    !cleanBase.includes("skylanit-linkedin-outreach.info-moneymatters1.workers.dev")
+  ) {
+    return isNewPath 
+      ? "https://skylanit-linkedin-outreach.info-moneymatters1.workers.dev/api/connect/li/callback"
+      : "https://skylanit-linkedin-outreach.info-moneymatters1.workers.dev/api/auth/linkedin/callback";
+  }
+
   const path = isNewPath ? "/api/connect/li/callback" : "/api/auth/linkedin/callback";
   return `${cleanBase}${path}`;
 };

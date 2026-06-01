@@ -93,12 +93,12 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
           redirectUri = "https://skylanit-linkedin-outreach.info-moneymatters1.workers.dev/api/connect/li/callback";
         }
 
-        // Construct high-integrity base64 state containing original web origin
+        // Construct high-integrity base64 state containing original web origin (URL-safe)
         const stateObj = {
           origin: window.location.origin,
           csrf: Math.random().toString(36).substring(2, 15)
         };
-        const state = btoa(JSON.stringify(stateObj));
+        const state = btoa(JSON.stringify(stateObj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
         const params = new URLSearchParams({
           response_type: "code",

@@ -165,9 +165,26 @@ function LinkedInCallbackHandler() {
         let targetOrigin = "";
         try {
           if (state) {
-            const decodedObj = JSON.parse(atob(state));
-            if (decodedObj && decodedObj.origin) {
-              targetOrigin = decodedObj.origin;
+            if (state.startsWith("http://") || state.startsWith("https://")) {
+              targetOrigin = state;
+            } else if (state.trim().startsWith("{")) {
+              const decodedObj = JSON.parse(state);
+              if (decodedObj && decodedObj.origin) {
+                targetOrigin = decodedObj.origin;
+              }
+            } else {
+              // Restore URL-safe base64 and plus signs replaced by spaces
+              let normalizedState = state.replace(/ /g, "+").replace(/-/g, "+").replace(/_/g, "/");
+              while (normalizedState.length % 4) {
+                normalizedState += "=";
+              }
+              const decodedStr = atob(normalizedState);
+              if (decodedStr.trim().startsWith("{")) {
+                const decodedObj = JSON.parse(decodedStr);
+                if (decodedObj && decodedObj.origin) {
+                  targetOrigin = decodedObj.origin;
+                }
+              }
             }
           }
         } catch (e) {
