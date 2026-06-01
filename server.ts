@@ -51,14 +51,20 @@ async function askGemini(prompt: string, instruction: string, jsonSchema?: any) 
         config.responseSchema = jsonSchema;
       }
 
-      const response = await ai.models.generateContent({
+      const generatePromise = ai.models.generateContent({
         model: modelName,
         contents: prompt,
         config,
       });
 
-      if (response.text) {
-        return response.text.trim();
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Model generation request timed out after 8s")), 8000)
+      );
+
+      const response = await Promise.race([generatePromise, timeoutPromise]);
+
+      if (response && (response as any).text) {
+        return (response as any).text.trim();
       }
     } catch (err: any) {
       console.warn(`Model ${modelName} failed. Error:`, err.message || err);
