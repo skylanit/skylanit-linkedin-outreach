@@ -81,8 +81,25 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
       if (!oauthUrl) {
         console.info("Constructing secure client-side LinkedIn OAuth dynamic url fallback...");
         const clientId = "86ufehp1ori1dk";
-        const redirectUri = `${window.location.origin}/api/connect/li/callback`;
-        const state = Math.random().toString(36).substring(2, 15);
+        
+        // Match registered production redirect URL if in preview environment, so LinkedIn doesn't reject it
+        let redirectUri = `${window.location.origin}/api/connect/li/callback`;
+        if (
+          window.location.origin.includes("run.app") || 
+          window.location.origin.includes("localhost") || 
+          window.location.origin.includes("3000") || 
+          !window.location.origin.includes("skylanit-linkedin-outreach.info-moneymatters1.workers.dev")
+        ) {
+          redirectUri = "https://skylanit-linkedin-outreach.info-moneymatters1.workers.dev/api/connect/li/callback";
+        }
+
+        // Construct high-integrity base64 state containing original web origin
+        const stateObj = {
+          origin: window.location.origin,
+          csrf: Math.random().toString(36).substring(2, 15)
+        };
+        const state = btoa(JSON.stringify(stateObj));
+
         const params = new URLSearchParams({
           response_type: "code",
           client_id: clientId,
