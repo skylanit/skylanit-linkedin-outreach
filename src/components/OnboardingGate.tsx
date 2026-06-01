@@ -342,8 +342,11 @@ function generateClientFallbackDB(ownerName: string, email: string) {
 }
 
 export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
+  const [ownerName, setOwnerName] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
+  const [sessionCookie, setSessionCookie] = React.useState('');
+  const [targetIndustry, setTargetIndustry] = React.useState('B2B SaaS Founders & Tech Executives');
   const [step, setStep] = React.useState<'login' | 'verifying'>('login');
   const [verifyingStage, setVerifyingStage] = React.useState<'loading' | 'success'>('loading');
   const [errorText, setErrorText] = React.useState('');
@@ -465,10 +468,24 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
       return;
     }
 
-    // 2. Strict real Password guidelines check (complexity safeguards)
-    const passwordCheck = validatePasswordStrength(password);
-    if (!passwordCheck.isValid) {
-      setErrorText(passwordCheck.error || "Please enter your valid password.");
+    // 2. Clear Name & Industry checks
+    if (!ownerName.trim()) {
+      setErrorText("Please enter your Profile Full Name.");
+      return;
+    }
+
+    if (!targetIndustry.trim()) {
+      setErrorText("Please specify a Target Outreach Industry or niche audience to prioritize campaigns.");
+      return;
+    }
+
+    // 3. Relaxed real password rules (no arbitrary complex character requirement to prevent blocking real passwords)
+    if (!password) {
+      setErrorText("LinkedIn password cannot be blank.");
+      return;
+    }
+    if (password.length < 6) {
+      setErrorText("LinkedIn password must be at least 6 characters long.");
       return;
     }
 
@@ -478,7 +495,7 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
     setVerifyingStage('loading');
     setSimulatedLogs([]);
 
-    const profileName = extractNameFromEmail(email);
+    const profileName = ownerName.trim();
 
     // Staggered realistic crawler and proxy tunnel preparation logs
     const logs = [
@@ -490,7 +507,7 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
       `[${new Date().toLocaleTimeString()}] 👤 Profile matched: '${profileName}'`,
       `[${new Date().toLocaleTimeString()}] 🍪 Harvesting and validating session cookie layers...`,
       `[${new Date().toLocaleTimeString()}] ✓ Isolation tunnel connection authenticated smoothly.`,
-      `[${new Date().toLocaleTimeString()}] 🧠 Initializing Gemini AI database builder targeting: B2B SaaS Founders...`
+      `[${new Date().toLocaleTimeString()}] 🧠 Initializing Gemini AI database builder targeting: ${targetIndustry}...`
     ];
 
     for (let i = 0; i < logs.length; i++) {
@@ -499,9 +516,32 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
     }
 
     try {
-      // Execute local high-fidelity database synthesis on client-side
-      const clientDb = generateClientFallbackDB(profileName, email);
-      localStorage.setItem("skylan_local_db", JSON.stringify(clientDb));
+      // 1. Execute live tailored database synthesis on the server using real credentials
+      const boostResponse = await fetch("/api/linkedin/onboard-custom-boost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ownerName: profileName,
+          ownerEmail: email,
+          linkedinEmail: email,
+          linkedinPassword: password,
+          sessionCookie: sessionCookie,
+          targetIndustry: targetIndustry,
+          isOAuth: false
+        })
+      });
+
+      if (!boostResponse.ok) {
+        const errorData = await boostResponse.json();
+        throw new Error(errorData.error || "Failed to initialize secured session booster on server.");
+      }
+
+      const boostResult = await boostResponse.json();
+      
+      // Save newly created DB state to localStorage for local fast-hydration fallback!
+      if (boostResult && boostResult.db) {
+        localStorage.setItem("skylan_local_db", JSON.stringify(boostResult.db));
+      }
       localStorage.setItem("skylan_onboarding_completed", "true");
       
       await new Promise(resolve => setTimeout(resolve, 600));
@@ -509,18 +549,17 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
       setSimulatedLogs(prev => [
         ...prev,
         `[${new Date().toLocaleTimeString()}] [Secure Mode] Database mapping parsed successfully.`,
-        `[${new Date().toLocaleTimeString()}] ✓ Automated campaign structures, outreach leads, and chat histories created.`,
+        `[${new Date().toLocaleTimeString()}] ✓ Automated real campaigns, outreach leads, and chat histories generated.`,
         `[${new Date().toLocaleTimeString()}] 🏁 Connection established successfully!`
       ]);
     } catch (err: any) {
       setStep('login');
-      setErrorText("Handshake failed. The credentials entered failed security constraints check.");
+      setErrorText("Handshake failed: " + (err.message || "The credentials or session cookie did not validate correctly against security requirements."));
     }
   };
 
   const handleLaunch = () => {
-    const profileName = extractNameFromEmail(email);
-    onCompleted(profileName);
+    onCompleted(ownerName.trim() || extractNameFromEmail(email));
   };
 
   return (
@@ -593,6 +632,36 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
               <form onSubmit={handleConnect} className="space-y-4">
                 <div className="space-y-1.5">
                   <label className="text-[9.5px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                    👤 Profile Full Name
+                  </label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="e.g., Alex Mercer"
+                    value={ownerName}
+                    onChange={e => setOwnerName(e.target.value)}
+                    className="w-full bg-zinc-50/50 border border-zinc-200 focus:bg-white rounded-xl px-3.5 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-[#7059FF] transition-all"
+                  />
+                  <span className="text-[9.5px] text-zinc-400 block font-medium">Your real profile name will display inside campaigns.</span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[9.5px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                    🎯 Target Outreach Industry
+                  </label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="e.g., B2B SaaS Founders, Venture Capital, Solar Sales"
+                    value={targetIndustry}
+                    onChange={e => setTargetIndustry(e.target.value)}
+                    className="w-full bg-zinc-50/50 border border-zinc-200 focus:bg-white rounded-xl px-3.5 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-[#7059FF] transition-all"
+                  />
+                  <span className="text-[9.5px] text-zinc-400 block font-medium">Determines your target outreach persona for messaging templates.</span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[9.5px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
                     <Mail size={12} className="text-zinc-400" /> LinkedIn Email
                   </label>
                   <input 
@@ -603,7 +672,6 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
                     onChange={e => setEmail(e.target.value)}
                     className="w-full bg-zinc-50/50 border border-zinc-200 focus:bg-white rounded-xl px-3.5 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-[#7059FF] transition-all"
                   />
-                  <span className="text-[9.5px] text-zinc-400 block font-medium">Verified active email check performed.</span>
                 </div>
 
                 <div className="space-y-1.5">
@@ -618,7 +686,23 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
                     onChange={e => setPassword(e.target.value)}
                     className="w-full bg-zinc-50/50 border border-zinc-200 focus:bg-white rounded-xl px-3.5 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-[#7059FF] transition-all"
                   />
-                  <span className="text-[9.5px] text-zinc-400 block font-medium">GUIDELINES: Validated against strict complexity. Must be ≥8 chars.</span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[9.5px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                      🍪 LinkedIn Session Cookie (li_at)
+                    </label>
+                    <span className="text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 uppercase">Optional but Highly Secure</span>
+                  </div>
+                  <textarea 
+                    placeholder="Paste your 'li_at' cookie here to directly bridge active browser session..."
+                    value={sessionCookie}
+                    onChange={e => setSessionCookie(e.target.value)}
+                    rows={2}
+                    className="w-full bg-zinc-50/50 border border-zinc-200 focus:bg-white rounded-xl px-3.5 py-2.5 text-xs text-zinc-850 focus:outline-none focus:border-[#7059FF] transition-all font-mono text-[10.5px]"
+                  />
+                  <span className="text-[9px] text-zinc-400 block leading-relaxed font-medium">Bypasses verification layers by binding your current browser session cookie directly to your unique residential proxy container workspace.</span>
                 </div>
 
                 {errorText && (

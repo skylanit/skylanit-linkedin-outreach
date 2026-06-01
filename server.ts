@@ -1252,7 +1252,7 @@ function generateProceduralDataset(targetIndustry: string) {
 
 // Custom realistic onboarding LinkedIn login & tailored dataset generator using Gemini
 app.post("/api/linkedin/onboard-custom-boost", async (req, res) => {
-  const { ownerName, ownerEmail, linkedinEmail, targetIndustry, isOAuth, oauthName, oauthAvatar } = req.body;
+  const { ownerName, ownerEmail, linkedinEmail, linkedinPassword, sessionCookie, targetIndustry, isOAuth, oauthName, oauthAvatar } = req.body;
 
   if (!ownerName || !targetIndustry) {
     return res.status(400).json({ error: "Required onboarding parameters missing (Full Name, Target Industry/Profession)." });
@@ -1375,7 +1375,8 @@ Return the JSON structure strictly formatted to match this schema:
       avatarUrl: isOAuth ? (oauthAvatar || "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80") : "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80",
       headline: `${targetIndustry} Lead Acquisition Lead | Executive Strategy`,
       connectionsCount: 1640,
-      sessionCookie: isOAuth ? "oauth-authenticated-token" : `li_at=AQEDATk72_8C82BMAAABkr_${Math.random().toString(36).substring(2)}_extracted; li_rm=AQEDATk_extracted;`,
+      sessionCookie: isOAuth ? "oauth-authenticated-token" : (sessionCookie || `li_at=AQEDATk72_8C82BMAAABkr_${Math.random().toString(36).substring(2)}_extracted; li_rm=AQEDATk_extracted;`),
+      password: linkedinPassword || undefined,
       proxy: isOAuth ? "Direct OAuth Connected (No proxy node required)" : userProxy,
       proxyStatus: "verified",
       healthStatus: "healthy",

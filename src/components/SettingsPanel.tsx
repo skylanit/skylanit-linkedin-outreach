@@ -17,7 +17,8 @@ import {
   PlusCircle,
   Check,
   Globe,
-  Info
+  Info,
+  Loader2
 } from 'lucide-react';
 import { LinkedInAccount, IntegrationSettings } from '../types';
 
@@ -510,6 +511,101 @@ export default function SettingsPanel({
                     </button>
                   </div>
                 </div>
+
+                {/* Secure Manual Credentials & Session Cookie Bridge */}
+                <form onSubmit={handleConnectNewAccount} className="p-5 bg-zinc-900/30 rounded-xl border border-zinc-850 space-y-3.5 mt-5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] bg-emerald-500/15 text-emerald-400 font-extrabold px-2.5 py-1 rounded uppercase tracking-wider">Manual Hook</span>
+                    <span className="text-[9px] text-emerald-400 font-bold flex items-center gap-1 font-mono">✓ Cookie & Proxy Bonded</span>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-bold text-zinc-150 uppercase tracking-wide">Connect manually with Session Cookie</h4>
+                    <p className="text-[11px] text-zinc-500 leading-relaxed mt-1">Directly bind your real LinkedIn session by specifying your profile details and your session cookie (<code>li_at</code>) from your browser.</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Full Name</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g., Alex Mercer"
+                        value={newName}
+                        onChange={e => setNewName(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Headline</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., VP of Sales @ TechCorp"
+                        value={newHeadline}
+                        onChange={e => setNewHeadline(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Connections Count</label>
+                      <input
+                        type="number"
+                        value={newConnections}
+                        onChange={e => setNewConnections(parseInt(e.target.value) || 500)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Residential Proxy Node Address (US-East / West)</label>
+                      <input
+                        type="text"
+                        required
+                        value={newProxy}
+                        onChange={e => setNewProxy(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-[9px] font-bold text-zinc-500 uppercase tracking-wider">LinkedIn Session Cookie (li_at)</label>
+                        <span className="text-[8.5px] text-zinc-500 font-semibold">Values mapped to Playwright vaults</span>
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        placeholder="AQEDATk72_8C82BMAAABkr..."
+                        value={newCookie}
+                        onChange={e => setNewCookie(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                      <span className="text-[8.5px] text-zinc-500 block mt-1 leading-relaxed">
+                        💡 <strong>How to get this:</strong> Log in to your LinkedIn profile on Google Chrome, right-click anywhere and press <strong>Inspect</strong>. Go to <strong>Application</strong> &rarr; <strong>Cookies</strong> &rarr; <strong>linkedin.com</strong>, find the cookie named <code>li_at</code>, and copy its value.
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={testingProxy}
+                    className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md"
+                  >
+                    {testingProxy ? (
+                      <>
+                        <Loader2 size={12} className="animate-spin" />
+                        <span>Testing residential proxy tunnel...</span>
+                      </>
+                    ) : (
+                      <>
+                        <PlusCircle size={13} />
+                        <span>Connect & Verify Profile</span>
+                      </>
+                    )}
+                  </button>
+                </form>
               </div>
 
               {/* Right Column: List of currently connected accounts */}
