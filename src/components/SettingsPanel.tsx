@@ -255,13 +255,67 @@ export default function SettingsPanel({
   };
 
   React.useEffect(() => {
+    const handleSuccessAndClean = (profileName: string) => {
+      setFormSuccess(`Connected '${profileName}' successfully via LinkedIn OAuth 2.0!`);
+      try {
+        localStorage.removeItem("skylan_pending_oauth_name");
+      } catch (e) {}
+
+      // Refresh database state from server and merge:
+      fetch("/api/db/get")
+        .then(res => res.json())
+        .then(db => {
+          if (db && db.accounts) {
+            const cachedDbRaw = localStorage.getItem("skylan_local_db");
+            const cached = cachedDbRaw ? JSON.parse(cachedDbRaw) : {};
+            const merged = { ...cached, ...db };
+            localStorage.setItem("skylan_local_db", JSON.stringify(merged));
+            
+            // Reload the tab layout is highly recommended here to seamlessly align all UI contexts
+            setTimeout(() => {
+              window.location.reload();
+            }, 600);
+          }
+        })
+        .catch(err => {
+          console.warn("Deferred state merge after OAuth link:", err);
+          setTimeout(() => {
+            window.location.reload();
+          }, 600);
+        });
+    };
+
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'LINKEDIN_OAUTH_SUCCESS') {
-        setFormSuccess(`Connected '${event.data.name}' successfully via LinkedIn OAuth 2.0!`);
+        handleSuccessAndClean(event.data.name);
       }
     };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'skylan_pending_oauth_name' && event.newValue) {
+        console.info("SettingsPanel received success from storage event:", event.newValue);
+        handleSuccessAndClean(event.newValue);
+      }
+    };
+
+    // Low-latency polling fallback
+    const interval = setInterval(() => {
+      try {
+        const pendingValue = localStorage.getItem("skylan_pending_oauth_name");
+        if (pendingValue) {
+          console.info("SettingsPanel received success from localStorage polling fallback:", pendingValue);
+          handleSuccessAndClean(pendingValue);
+        }
+      } catch (e) {}
+    }, 600);
+
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('storage', handleStorage);
+      clearInterval(interval);
+    };
   }, []);
 
   const handleSaveLimits = (e: React.FormEvent) => {

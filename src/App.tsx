@@ -119,18 +119,28 @@ export default function App() {
     if (success === "true") {
       console.info("Detected LinkedIn OAuth success sweep from URL parameters:", name);
       
+      // Store in localStorage immediately so parent can pick it up via storage events/polling
+      try {
+        localStorage.setItem("skylan_pending_oauth_name", name);
+      } catch (e) {
+        console.error("Failed to write pending OAuth name to localStorage:", e);
+      }
+      
       // If we are running inside the popup that was redirected back to parentOrigin
       if (window.opener) {
         try {
           window.opener.postMessage({ type: 'LINKEDIN_OAUTH_SUCCESS', name }, '*');
-          // Close the popup window automatically
-          setTimeout(() => {
-            window.close();
-          }, 300);
         } catch (e) {
           console.warn("Failed to communicate with opener from same-origin popup:", e);
         }
       }
+      
+      // Close the popup window/tab automatically
+      setTimeout(() => {
+        try {
+          window.close();
+        } catch (e) {}
+      }, 500);
       
       // Clean up the URL query parameters so the Address Bar stays pristine
       const url = new URL(window.location.href);

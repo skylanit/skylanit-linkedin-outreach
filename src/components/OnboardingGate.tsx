@@ -163,13 +163,46 @@ export default function OnboardingGate({ onCompleted }: OnboardingGateProps) {
   };
 
   React.useEffect(() => {
+    const handleSuccessAndClean = (profileName: string) => {
+      console.info("Interception success trigger handled:", profileName);
+      handleOAuthConnectionSuccessful(profileName);
+      try {
+        localStorage.removeItem("skylan_pending_oauth_name");
+      } catch (e) {}
+    };
+
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'LINKEDIN_OAUTH_SUCCESS') {
-        handleOAuthConnectionSuccessful(event.data.name);
+        handleSuccessAndClean(event.data.name);
       }
     };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'skylan_pending_oauth_name' && event.newValue) {
+        console.info("OnboardingGate received success from storage event:", event.newValue);
+        handleSuccessAndClean(event.newValue);
+      }
+    };
+
+    // Low-latency polling fallback (forces immediate synchronization in all edge browser scenarios)
+    const interval = setInterval(() => {
+      try {
+        const pendingValue = localStorage.getItem("skylan_pending_oauth_name");
+        if (pendingValue) {
+          console.info("OnboardingGate received success from localStorage polling fallback:", pendingValue);
+          handleSuccessAndClean(pendingValue);
+        }
+      } catch (e) {}
+    }, 600);
+
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    window.addEventListener('storage', handleStorage);
+    
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('storage', handleStorage);
+      clearInterval(interval);
+    };
   }, [ownerName, ownerEmail, targetIndustry, customIndustry]);
 
   const industryChoices = [
