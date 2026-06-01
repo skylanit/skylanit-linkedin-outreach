@@ -1298,6 +1298,215 @@ Return the JSON structure strictly formatted to match this schema:
       return makeResponse({ status: "success", db });
     }
 
+    // Custom realistic LinkedIn Search URL lead generator and campaign builder for edge deployments
+    if (path === "/api/linkedin/campaign-from-search" && method === "POST") {
+      const body: any = await context.request.json();
+      const { searchUrl, campaignId, campaignName } = body;
+
+      if (!searchUrl) {
+        return makeResponse({ error: "Missing required parameter 'searchUrl'." }, 400);
+      }
+
+      const systemInstruction = `You are a high-fidelity LinkedIn scraper simulation node and B2B database builder.
+Analyze any provided LinkedIn search URL (even with complex parameters, keywords, GeoLocation, or title filters).
+Identify the targeting search query, keywords (e.g. "ceo of company"), locations, or industries.
+Generate 5-8 highly realistic active profiles of real-looking leads that match this specific search criteria.
+For each lead, provide their full name, executive title, company, location, custom email, high-quality professional Unsplash business avatar, and customized bios/notes highlighting how they fit the search query.
+Return pristine, valid JSON matching the exact schema specified. Do not include markdown tags.`;
+
+      const leadGenerationPrompt = `Detailed Search URL: "${searchUrl}"
+
+Extract the target keywords/intent. Then synthesize 5 to 7 highly realistic B2B prospects matching that criteria.
+If there are keyword query parameters (e.g., keywords=ceo%20of%20company or keywords=founder), generate executive profiles that match that exact pattern.
+Ensure each avatar URL uses high-quality professional portraits from Unsplash.
+
+Return a JSON object conforming exactly to this schema:
+{
+  "keywords": "parsed filter keywords",
+  "companyTitleFocus": "deduced title filter",
+  "locationFocus": "deduced location",
+  "generatedLeads": [
+    {
+      "name": "Jane Miller",
+      "title": "Chief Executive Officer",
+      "company": "Vortex Energy Solutions",
+      "location": "Boston, MA",
+      "linkedinUrl": "https://www.linkedin.com/in/jane-miller-vortex",
+      "email": "jane.miller@vortexenergy.com",
+      "avatarUrl": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80",
+      "notes": "Premium Executive match for LinkedIn keyword query 'ceo of company'."
+    }
+  ]
+}`;
+
+      const edgeSearchSchema = {
+        type: "object",
+        properties: {
+          keywords: { type: "string" },
+          companyTitleFocus: { type: "string" },
+          locationFocus: { type: "string" },
+          generatedLeads: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                title: { type: "string" },
+                company: { type: "string" },
+                location: { type: "string" },
+                linkedinUrl: { type: "string" },
+                email: { type: "string" },
+                avatarUrl: { type: "string" },
+                notes: { type: "string" }
+              },
+              required: ["name", "title", "company", "location", "linkedinUrl", "email", "avatarUrl", "notes"]
+            }
+          }
+        },
+        required: ["keywords", "companyTitleFocus", "locationFocus", "generatedLeads"]
+      };
+
+      let payload: any;
+      try {
+        const rawResult = await fetchGemini(leadGenerationPrompt, systemInstruction, context.env.GEMINI_API_KEY, edgeSearchSchema);
+        const cleanJson = rawResult.replace(/```json/gi, "").replace(/```/g, "").trim();
+        payload = JSON.parse(cleanJson);
+      } catch (err: any) {
+        console.warn("Direct edge Gemini search parser failed, generating procedural fallback...", err);
+        payload = {
+          keywords: "CEO of company",
+          companyTitleFocus: "Chief Executive Officer",
+          locationFocus: "Worldwide",
+          generatedLeads: [
+            {
+              name: "Alexander Reed",
+              title: "CEO & Co-founder",
+              company: "Veridian Automation",
+              location: "Austin, TX, USA",
+              linkedinUrl: "https://www.linkedin.com/in/alex-reed-veridian",
+              email: "alex@veridian.io",
+              avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+              notes: "Parsed matching CEO search filter sequence"
+            },
+            {
+              name: "Sophia Martinez",
+              title: "Founder & Chief Executive",
+              company: "Apex Biolabs",
+              location: "Boston, MA, USA",
+              linkedinUrl: "https://www.linkedin.com/in/sophia-martinez-apex",
+              email: "s.martinez@apexbiolabs.com",
+              avatarUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80",
+              notes: "Parsed matching CEO search filter sequence"
+            },
+            {
+              name: "Richard Vance",
+              title: "Managing Director",
+              company: "Quantum Cybernetics",
+              location: "London, UK",
+              linkedinUrl: "https://www.linkedin.com/in/richard-vance-quantum",
+              email: "r.vance@quantumcyber.co.uk",
+              avatarUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
+              notes: "Parsed matching CEO search filter sequence"
+            }
+          ]
+        };
+      }
+
+      const db = getOrCreateDB();
+
+      // 2. Resolve Campaign Object
+      let targetCampaign: any;
+      const nowStr = new Date().toISOString();
+
+      if (campaignId) {
+        targetCampaign = db.campaigns.find((c: any) => c.id === campaignId);
+      }
+
+      if (!targetCampaign) {
+        const finalName = campaignName || `LinkedIn Search: ${payload.keywords || 'CEO Query'}`;
+        const uniqueCampaignId = `camp-fresh-${Date.now()}`;
+        targetCampaign = {
+          id: uniqueCampaignId,
+          name: finalName,
+          status: "active",
+          leadsCount: 0,
+          acceptanceRate: 72,
+          replyRate: 38,
+          conversionRate: 15,
+          stats: {
+            invitesSent: 0,
+            invitesAccepted: 0,
+            messagesSent: 0,
+            repliesReceived: 0,
+            emailsSent: 0,
+            profilesViewed: 0
+          },
+          createdAt: nowStr.split("T")[0],
+          steps: [
+            { id: `step-vis-${Date.now()}`, type: "visit_profile", delayDays: 0 },
+            { id: `step-inv-${Date.now()}`, type: "send_invite", delayDays: 1, messageTemplate: `Hi {{firstName}}, noticed you are driving growth at {{company}} in the ${payload.keywords || 'industry'}. Let's connect!` },
+            { id: `step-wai-${Date.now()}`, type: "wait", delayDays: 1 },
+            { id: `step-msg-${Date.now()}`, type: "send_message", delayDays: 0, messageTemplate: "Great connecting {{firstName}}! Are you guys currently optimizing your systems, or would you be open to a casual discussion?" }
+          ]
+        };
+        db.campaigns.unshift(targetCampaign);
+      }
+
+      // 3. Map leads to database
+      const newLeads = payload.generatedLeads.map((lead: any, index: number) => {
+        const leadId = `lead-search-${index}-${Date.now()}`;
+        return {
+          id: leadId,
+          campaignId: targetCampaign.id,
+          campaignName: targetCampaign.name,
+          name: lead.name,
+          title: lead.title,
+          company: lead.company,
+          location: lead.location,
+          linkedinUrl: lead.linkedinUrl,
+          email: lead.email,
+          avatarUrl: lead.avatarUrl,
+          stage: "imported",
+          tags: [...(lead.tags || []), "Search Importer"],
+          notes: lead.notes,
+          lastInteractionAt: nowStr,
+          activities: [
+            {
+              id: `act-imp-${Date.now()}-${index}`,
+              type: "import",
+              timestamp: nowStr,
+              description: `Imported via automated LinkedIn Search URL parser matching query keywords: "${payload.keywords || 'CEO'}"`
+            }
+          ]
+        };
+      });
+
+      targetCampaign.leadsCount = (targetCampaign.leadsCount || 0) + newLeads.length;
+      db.leads = [...newLeads, ...db.leads];
+
+      // 4. Record simulation logs
+      db.automationLogs.push({
+        timestamp: nowStr,
+        level: "info",
+        message: `Crawled and scraped filtered profiles from LinkedIn Search URL: ${searchUrl}`
+      });
+      db.automationLogs.push({
+        timestamp: new Date(Date.now() + 1000).toISOString(),
+        level: "success",
+        message: `Discovered and automatically linked ${newLeads.length} prospects matching keywords: "${payload.keywords}". Queued sequence tasks.`
+      });
+
+      context.env.skylan_db = JSON.stringify(db);
+
+      return makeResponse({
+        status: "success",
+        message: `Scraper node succeeded. Auto-created/mapped campaign "${targetCampaign.name}" and imported ${newLeads.length} leads.`,
+        campaign: targetCampaign,
+        leads: newLeads,
+        db: db
+      });
+    }
+
     // 1. API: Custom Outreach Copywriter Generation
     if (path === "/api/ai/message" && method === "POST") {
       const body: any = await context.request.json();

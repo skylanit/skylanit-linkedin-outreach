@@ -486,72 +486,72 @@ export default function App() {
     }
   }, []);
 
-  // 1. Load entire database state on first bootstrap mount
-  React.useEffect(() => {
-    const loadInitDB = () => {
-      // Prioritize local state restore instantly:
-      const cachedDbRaw = localStorage.getItem("skylan_local_db");
-      if (cachedDbRaw) {
-        try {
-          const db = JSON.parse(cachedDbRaw);
-          if (db.campaigns) setCampaigns(db.campaigns);
-          if (db.leads) setLeads(db.leads);
-          if (db.chatMessages) setChatMessages(db.chatMessages);
-          if (db.teamMembers) setTeamMembers(db.teamMembers);
-          if (db.integrations) setIntegrations(db.integrations);
-          if (db.accounts) {
-            setLinkedinAccounts(db.accounts);
-            const active = db.accounts.find((a: any) => a.isActive) || db.accounts[0];
+  const refreshDatabase = React.useCallback(() => {
+    fetch("/api/db/get")
+      .then(res => res.json())
+      .then(db => {
+        if (db) {
+          // Merge with local state to ensure no loss of connected profiles
+          const latestCached = localStorage.getItem("skylan_local_db");
+          const cached = latestCached ? JSON.parse(latestCached) : {};
+          const mergedDb = { ...cached, ...db };
+          localStorage.setItem("skylan_local_db", JSON.stringify(mergedDb));
+
+          if (mergedDb.campaigns) setCampaigns(mergedDb.campaigns);
+          if (mergedDb.leads) setLeads(mergedDb.leads);
+          if (mergedDb.chatMessages) setChatMessages(mergedDb.chatMessages);
+          if (mergedDb.teamMembers) setTeamMembers(mergedDb.teamMembers);
+          if (mergedDb.integrations) setIntegrations(mergedDb.integrations);
+          if (mergedDb.accounts) {
+            setLinkedinAccounts(mergedDb.accounts);
+            const active = mergedDb.accounts.find((a: any) => a.isActive) || mergedDb.accounts[0];
             if (active) {
               setLinkedinAccount(active);
             }
           }
-          if (localStorage.getItem("skylan_onboarding_completed") === "true") {
-            setShowLanding(false);
-            setIsOnboarding(false);
-          }
-          setIsLoading(false);
-        } catch (e) {
-          console.warn("Could not restore cached DB snapshot:", e);
         }
-      }
-
-      fetch("/api/db/get")
-        .then(res => res.json())
-        .then(db => {
-          if (db) {
-            // Merge with local state to ensure no loss of connected profiles
-            const latestCached = localStorage.getItem("skylan_local_db");
-            const cached = latestCached ? JSON.parse(latestCached) : {};
-            const mergedDb = { ...cached, ...db };
-            localStorage.setItem("skylan_local_db", JSON.stringify(mergedDb));
-
-            if (mergedDb.campaigns) setCampaigns(mergedDb.campaigns);
-            if (mergedDb.leads) setLeads(mergedDb.leads);
-            if (mergedDb.chatMessages) setChatMessages(mergedDb.chatMessages);
-            if (mergedDb.teamMembers) setTeamMembers(mergedDb.teamMembers);
-            if (mergedDb.integrations) setIntegrations(mergedDb.integrations);
-            if (mergedDb.accounts) {
-              setLinkedinAccounts(mergedDb.accounts);
-              const active = mergedDb.accounts.find((a: any) => a.isActive) || mergedDb.accounts[0];
-              if (active) {
-                setLinkedinAccount(active);
-              }
-            }
-          }
-          if (localStorage.getItem("skylan_onboarding_completed") === "true") {
-            setShowLanding(false);
-            setIsOnboarding(false);
-          }
-          setIsLoading(false);
-        })
-        .catch(err => {
-          console.error("Failed to fetch persistent db snapshot:", err);
-          setIsLoading(false);
-        });
-    };
-    loadInitDB();
+        if (localStorage.getItem("skylan_onboarding_completed") === "true") {
+          setShowLanding(false);
+          setIsOnboarding(false);
+        }
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error("Failed to fetch persistent db snapshot:", err);
+        setIsLoading(false);
+      });
   }, []);
+
+  // 1. Load entire database state on first bootstrap mount
+  React.useEffect(() => {
+    // Prioritize local state restore instantly:
+    const cachedDbRaw = localStorage.getItem("skylan_local_db");
+    if (cachedDbRaw) {
+      try {
+        const db = JSON.parse(cachedDbRaw);
+        if (db.campaigns) setCampaigns(db.campaigns);
+        if (db.leads) setLeads(db.leads);
+        if (db.chatMessages) setChatMessages(db.chatMessages);
+        if (db.teamMembers) setTeamMembers(db.teamMembers);
+        if (db.integrations) setIntegrations(db.integrations);
+        if (db.accounts) {
+          setLinkedinAccounts(db.accounts);
+          const active = db.accounts.find((a: any) => a.isActive) || db.accounts[0];
+          if (active) {
+            setLinkedinAccount(active);
+          }
+        }
+        if (localStorage.getItem("skylan_onboarding_completed") === "true") {
+          setShowLanding(false);
+          setIsOnboarding(false);
+        }
+        setIsLoading(false);
+      } catch (e) {
+        console.warn("Could not restore cached DB snapshot:", e);
+      }
+    }
+    refreshDatabase();
+  }, [refreshDatabase]);
 
   // 2. Poll changes periodically (e.g. background automation logs and stage progressions)
   React.useEffect(() => {
@@ -1062,6 +1062,7 @@ export default function App() {
               onCreateCampaign={handleCreateCampaign}
               onUpdateCampaignStatus={handleUpdateCampaignStatus}
               onUpdateSteps={handleUpdateSteps}
+              onRefreshDB={refreshDatabase}
             />
           )}
 

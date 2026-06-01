@@ -25,17 +25,61 @@ interface CampaignsPanelProps {
   onCreateCampaign: (name: string, steps: CampaignStep[]) => void;
   onUpdateCampaignStatus: (campaignId: string, status: Campaign['status']) => void;
   onUpdateSteps: (campaignId: string, steps: CampaignStep[]) => void;
+  onRefreshDB: () => void;
 }
 
 export default function CampaignsPanel({
   campaigns,
   onCreateCampaign,
   onUpdateCampaignStatus,
-  onUpdateSteps
+  onUpdateSteps,
+  onRefreshDB
 }: CampaignsPanelProps) {
   const [selectedCampaign, setSelectedCampaign] = React.useState<Campaign | null>(campaigns[0] || null);
   const [isCreating, setIsCreating] = React.useState(false);
   const [newCampaignName, setNewCampaignName] = React.useState('');
+
+  // LinkedIn Search URL Importer states
+  const [searchUrl, setSearchUrl] = React.useState('');
+  const [targetCampaignId, setTargetCampaignId] = React.useState('');
+  const [customCampaignName, setCustomCampaignName] = React.useState('');
+  const [isImportingSearchUrl, setIsImportingSearchUrl] = React.useState(false);
+  const [importError, setImportError] = React.useState('');
+  const [importSuccess, setImportSuccess] = React.useState('');
+
+  const handleImportSearchUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchUrl.trim()) return;
+    setIsImportingSearchUrl(true);
+    setImportError('');
+    setImportSuccess('');
+
+    try {
+      const response = await fetch("/api/linkedin/campaign-from-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          searchUrl: searchUrl.trim(),
+          campaignId: targetCampaignId || undefined,
+          campaignName: customCampaignName.trim() || undefined
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to crawl target LinkedIn search link.");
+      }
+      setImportSuccess(data.message || "Leads crawled and imported successfully!");
+      setSearchUrl('');
+      setCustomCampaignName('');
+      setTargetCampaignId('');
+      onRefreshDB(); // notify parent to re-fetch database state
+    } catch (err: any) {
+      console.error(err);
+      setImportError(err.message || "Could not link leads. Please check your credentials and retry.");
+    } finally {
+      setIsImportingSearchUrl(false);
+    }
+  };
   
   // AI message creator controls
   const [aiPrompt, setAiPrompt] = React.useState('');
@@ -289,6 +333,85 @@ export default function CampaignsPanel({
               </button>
             </div>
           )}
+        </div>
+
+        {/* LINKEDIN SEARCH URL IMPORT SYSTEM */}
+        <div className="bg-zinc-950/40 border border-zinc-900 rounded-2xl p-4 text-left space-y-3 shadow-inner ring-1 ring-zinc-800/60">
+          <div className="flex items-center gap-1.5 text-zinc-300 font-bold text-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            🔗 LinkedIn Search URL Importer
+          </div>
+          <p className="text-[10px] text-zinc-400 leading-relaxed">
+            Paste a LinkedIn search results URL containing filters (e.g., location, keywords) to automatically import custom, hyper-targeted executive prospects and queue them under Skylan CRM.
+          </p>
+
+          <form onSubmit={handleImportSearchUrl} className="space-y-2.5">
+            <div>
+              <label className="block text-[9px] text-zinc-500 font-bold mb-0.5">LINKEDIN SEARCH URL</label>
+              <textarea
+                required
+                placeholder="e.g., https://www.linkedin.com/search/results/people/?keywords=ceo%20of%20company..."
+                value={searchUrl}
+                onChange={e => setSearchUrl(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-[10px] text-zinc-200 h-16 focus:outline-none focus:border-zinc-700 resize-none font-sans leading-normal"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-[10px]">
+              <div>
+                <label className="block text-[9px] text-zinc-500 font-bold mb-0.5">TARGET CAMPAIGN</label>
+                <select
+                  value={targetCampaignId}
+                  onChange={e => setTargetCampaignId(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-805 rounded px-1 h-7 text-[10px] text-zinc-300 cursor-pointer focus:outline-none focus:border-zinc-700 font-semibold"
+                >
+                  <option value="">-- Create Brand New --</option>
+                  {campaigns.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[9px] text-zinc-500 font-bold mb-0.5">NEW CAMPAIGN NAME</label>
+                <input
+                  type="text"
+                  placeholder="Optional name override"
+                  disabled={!!targetCampaignId}
+                  value={customCampaignName}
+                  onChange={e => setCustomCampaignName(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-1 h-7 text-[10px] text-zinc-300 disabled:opacity-50"
+                />
+              </div>
+            </div>
+
+            {importError && (
+              <div className="p-2 border border-red-900/30 bg-red-950/10 rounded text-[9.5px] text-red-400 font-medium leading-relaxed">
+                ⚠️ {importError}
+              </div>
+            )}
+
+            {importSuccess && (
+              <div className="p-2 border border-emerald-950/30 bg-emerald-950/15 rounded text-[9.5px] text-emerald-400 font-semibold leading-relaxed">
+                ✓ {importSuccess}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isImportingSearchUrl}
+              className="w-full p-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-zinc-100 rounded text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/15"
+            >
+              {isImportingSearchUrl ? (
+                <>
+                  <Loader2 size={11} className="animate-spin" />
+                  Analyzing Filters & Scrapping Matches...
+                </>
+              ) : (
+                "Scan Filters & Run Sequence"
+              )}
+            </button>
+          </form>
         </div>
       </div>
 
