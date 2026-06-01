@@ -57,6 +57,154 @@ import {
   initialIntegrations 
 } from './data';
 
+// S1. OAuth Callback client-side custom handler component
+function LinkedInCallbackHandler() {
+  const [status, setStatus] = React.useState<'loading' | 'success' | 'error'>('loading');
+  const [statusMessage, setStatusMessage] = React.useState('Initializing secure handshake...');
+  const [profileName, setProfileName] = React.useState('');
+  const [errorMessage, setErrorMessage] = React.useState('');
+
+  React.useEffect(() => {
+    const exchangeCode = async () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get("code");
+        const state = params.get("state") || "";
+        const error = params.get("error");
+        const errorDesc = params.get("error_description");
+
+        if (error) {
+          setStatus('error');
+          setErrorMessage(errorDesc || error);
+          return;
+        }
+
+        if (!code) {
+          setStatus('error');
+          setErrorMessage("Authorization code is missing from the redirection callback.");
+          return;
+        }
+
+        setStatusMessage("Exchanging Authorization Code with LinkedIn...");
+        const response = await fetch("/api/connect/li/exchange", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ code, state })
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `Server returned error status ${response.status}`);
+        }
+
+        const data = await response.json();
+        setProfileName(data.name || "LinkedIn Member");
+        setStatusMessage("Connection successfully authorized and verified!");
+        setStatus('success');
+
+        // Store in localStorage immediately so parent can pick it up via storage events/polling
+        try {
+          localStorage.setItem("skylan_pending_oauth_name", data.name || "LinkedIn User");
+        } catch (e) {
+          console.error("Failed to write pending OAuth name to localStorage:", e);
+        }
+
+        // If we are running inside the popup that was redirected back to parentOrigin
+        if (window.opener) {
+          try {
+            window.opener.postMessage({ type: 'LINKEDIN_OAUTH_SUCCESS', name: data.name }, '*');
+          } catch (e) {
+            console.warn("Failed to communicate with opener from same-origin popup:", e);
+          }
+        }
+
+        // Auto-close after a small delay
+        setTimeout(() => {
+          try {
+            window.close();
+          } catch (e) {}
+        }, 3000);
+
+      } catch (err: any) {
+        setStatus('error');
+        setErrorMessage(err.message || "A network error occurred while finalizing LinkedIn OAuth.");
+      }
+    };
+
+    exchangeCode();
+  }, []);
+
+  return (
+    <div className="bg-zinc-950 text-zinc-100 min-h-screen flex items-center justify-center p-6 font-sans">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(79,70,229,0.06)_0,transparent_100%)] pointer-events-none" />
+      
+      <div className="w-full max-w-md bg-zinc-900/60 border border-zinc-800 p-8 rounded-3xl backdrop-blur-xl shadow-2xl relative">
+        <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent" />
+        
+        <div className="flex flex-col items-center text-center space-y-6">
+          <div className="relative">
+            <div className={`w-16 h-16 rounded-2xl bg-indigo-950/40 border border-indigo-500/20 flex items-center justify-center ${status === 'loading' ? 'animate-pulse' : ''}`}>
+              <Linkedin size={28} className="text-indigo-400" />
+            </div>
+            {status === 'success' && (
+              <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-zinc-900 flex items-center justify-center text-zinc-950 text-xs font-bold font-sans">✓</span>
+            )}
+            {status === 'error' && (
+              <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-red-500 border-2 border-zinc-900 flex items-center justify-center text-white text-xs font-bold font-sans">!</span>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold tracking-tight text-zinc-100">
+              {status === 'loading' && "LinkedIn Secure Handshake"}
+              {status === 'success' && "Connection Successful!"}
+              {status === 'error' && "Connection Failed"}
+            </h2>
+            <p className="text-xs text-zinc-400 leading-relaxed font-sans max-w-sm">
+              {status === 'loading' && statusMessage}
+              {status === 'success' && `Your LinkedIn profile "${profileName}" has been securely connected to your Skylan workspace.`}
+              {status === 'error' && errorMessage}
+            </p>
+          </div>
+
+          {status === 'loading' && (
+            <div className="flex items-center gap-2 text-indigo-400 text-xs font-semibold py-1.5 px-4 bg-indigo-950/40 border border-indigo-900/40 rounded-full animate-pulse font-sans">
+              <Loader2 size={12} className="animate-spin" />
+              Verifying credentials safely...
+            </div>
+          )}
+
+          {status === 'success' && (
+            <div className="space-y-4 w-full">
+              <div className="text-[10px] text-zinc-500 font-sans">
+                This window can now be safely closed. Redirecting...
+              </div>
+              <button 
+                onClick={() => { try { window.close(); } catch (e) {} }}
+                className="w-full p-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-zinc-100 rounded-xl text-xs font-semibold cursor-pointer shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/35 transition-all text-center"
+              >
+                Close Window
+              </button>
+            </div>
+          )}
+
+          {status === 'error' && (
+            <button 
+              onClick={() => { try { window.close(); } catch (e) {} }}
+              className="w-full p-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-semibold cursor-pointer shadow-lg transition-all text-center"
+            >
+              Close Window
+            </button>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [showLanding, setShowLanding] = React.useState(() => {
     try {
@@ -498,6 +646,14 @@ export default function App() {
     setTeamMembers(nextTeam);
     saveToDB({ teamMembers: nextTeam });
   };
+
+  const isLinkedInCallback = 
+    window.location.pathname.includes("/api/connect/li/callback") || 
+    window.location.pathname.includes("/api/auth/linkedin/callback");
+
+  if (isLinkedInCallback) {
+    return <LinkedInCallbackHandler />;
+  }
 
   if (showLanding) {
     return (

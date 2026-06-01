@@ -626,6 +626,124 @@ app.get(["/api/auth/linkedin/status", "/api/connect/li/status"], (req, res) => {
   });
 });
 
+// Secure code exchange POST route for client-side routing fallback compatibility
+app.post(["/api/auth/linkedin/exchange", "/api/connect/li/exchange"], async (req, res) => {
+  try {
+    const { code, state: stateParam } = req.body;
+
+    if (!code) {
+      return res.status(400).json({ error: "Authorization code missing from request." });
+    }
+
+    const clientId = process.env.LINKEDIN_CLIENT_ID || "86ufehp1ori1dk";
+    const clientSecret = process.env.LINKEDIN_CLIENT_SECRET || "WPL_AP1.kn9mlO61okp7KkbX.bqENMg==";
+
+    if (!clientId || !clientSecret) {
+      return res.status(500).json({ error: "LINKEDIN_CLIENT_ID or LINKEDIN_CLIENT_SECRET is missing on the server environment." });
+    }
+
+    let parentOrigin = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+    try {
+      if (stateParam) {
+        const decoded = JSON.parse(Buffer.from(stateParam as string, "base64").toString("utf-8"));
+        if (decoded && decoded.origin) {
+          parentOrigin = decoded.origin;
+        }
+      }
+    } catch (e) {
+      console.warn("Could not decode state origin on Express exchange:", e);
+      if (stateParam && ((stateParam as string).startsWith("http://") || (stateParam as string).startsWith("https://"))) {
+        parentOrigin = stateParam as string;
+      }
+    }
+
+    const isNew = true;
+    const redirectUri = getRedirectUri(req, isNew);
+
+    // Exchange Code for Access Token
+    const params = new URLSearchParams({
+      grant_type: "authorization_code",
+      code: code as string,
+      redirect_uri: redirectUri,
+      client_id: clientId,
+      client_secret: clientSecret
+    });
+
+    const tokenResponse = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString()
+    });
+
+    if (!tokenResponse.ok) {
+      const errBody = await tokenResponse.text();
+      return res.status(400).json({ error: `LinkedIn Token exchange failed: ${errBody}` });
+    }
+
+    const tokenData: any = await tokenResponse.json();
+    const accessToken = tokenData.access_token;
+
+    // Fetch user profile info
+    const userinfoResponse = await fetch("https://api.linkedin.com/v2/userinfo", {
+      headers: { "Authorization": `Bearer ${accessToken}` }
+    });
+
+    let profileName = "LinkedIn User";
+    let email = "oauth-user@linkedin.com";
+    let avatarUrl = "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80";
+    let headline = "LinkedIn Professional (OAuth Authenticated)";
+
+    if (userinfoResponse.ok) {
+      const userInfo: any = await userinfoResponse.json();
+      profileName = `${userInfo.given_name || ""} ${userInfo.family_name || ""}`.trim() || profileName;
+      email = userInfo.email || email;
+      avatarUrl = userInfo.picture || avatarUrl;
+    }
+
+    const db = readDB();
+    if (!db.accounts) db.accounts = [];
+
+    const newAccountId = `acc-oauth-${Date.now()}`;
+    const newAccount = {
+      id: newAccountId,
+      connected: true,
+      name: profileName,
+      avatarUrl: avatarUrl,
+      headline: headline,
+      connectionsCount: 500,
+      sessionCookie: "oauth-authenticated-token",
+      proxy: "Direct OAuth Connected (No proxy node required)",
+      proxyStatus: "verified",
+      healthStatus: "healthy",
+      isActive: true,
+      rateLimits: {
+        invitesPerDay: 40,
+        messagesPerDay: 80,
+        profileViewsPerDay: 50,
+        humanDelayMinSec: 45,
+        humanDelayMaxSec: 180
+      }
+    };
+
+    // Deactivate previous active profiles
+    db.accounts.forEach((acc: any) => { acc.isActive = false; });
+    db.accounts.push(newAccount);
+
+    db.automationLogs.push({
+      timestamp: new Date().toISOString(),
+      level: "success",
+      message: `LinkedIn Profile '${profileName}' successfully linked via OAuth 2.0 exchange!`
+    });
+
+    writeDB(db);
+
+    return res.json({ status: "success", name: profileName, avatarUrl, headline });
+  } catch (err: any) {
+    console.error("LinkedIn OAuth Exchange error on Express POST:", err);
+    return res.status(500).json({ error: err.message || "An unexpected error occurred during state validation." });
+  }
+});
+
 // LinkedIn OAuth 2.0 Callback endpoint
 app.get(["/api/auth/linkedin/callback", "/api/auth/linkedin/callback/", "/api/connect/li/callback", "/api/connect/li/callback/"], async (req, res) => {
   const { code, state: stateParam, error, error_description } = req.query;

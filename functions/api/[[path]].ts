@@ -584,6 +584,117 @@ export const onRequest = async (context: any) => {
       });
     }
 
+    // DX. OAUTH: LinkedIn Secure Post Exchange route for client-side routing fallback compatibility
+    if ((path === "/api/auth/linkedin/exchange" || path === "/api/connect/li/exchange") && method === "POST") {
+      try {
+        const body: any = await context.request.json();
+        const { code, state: stateParam } = body;
+
+        if (!code) {
+          return makeResponse({ error: "Authorization code missing from POST body request." }, 400);
+        }
+
+        let parentOrigin = url.origin;
+        try {
+          if (stateParam) {
+            const decoded = JSON.parse(atob(stateParam));
+            if (decoded && decoded.origin) {
+              parentOrigin = decoded.origin;
+            }
+          }
+        } catch (e) {
+          console.warn("Could not decode state origin on Cloudflare Edge during posture exchange:", e);
+          if (stateParam && (stateParam.startsWith("http://") || stateParam.startsWith("https://"))) {
+            parentOrigin = stateParam;
+          }
+        }
+
+        const isNew = true;
+        const clientId = context.env.LINKEDIN_CLIENT_ID || "86ufehp1ori1dk";
+        const clientSecret = context.env.LINKEDIN_CLIENT_SECRET || "WPL_AP1.kn9mlO61okp7KkbX.bqENMg==";
+        const redirectUri = isNew ? `${url.origin}/api/connect/li/callback` : `${url.origin}/api/auth/linkedin/callback`;
+
+        // Exchange code for Access Token
+        const tokenParams = new URLSearchParams({
+          grant_type: "authorization_code",
+          code: code,
+          redirect_uri: redirectUri,
+          client_id: clientId,
+          client_secret: clientSecret
+        });
+
+        const tokenResponse = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: tokenParams.toString()
+        });
+
+        if (!tokenResponse.ok) {
+          const errBody = await tokenResponse.text();
+          return makeResponse({ error: `LinkedIn Token exchange failed: ${errBody}` }, 400);
+        }
+
+        const tokenData: any = await tokenResponse.json();
+        const accessToken = tokenData.access_token;
+
+        // Fetch user profile info
+        const userinfoResponse = await fetch("https://api.linkedin.com/v2/userinfo", {
+          headers: { "Authorization": `Bearer ${accessToken}` }
+        });
+
+        let profileName = "LinkedIn User";
+        let email = "oauth-user@linkedin.com";
+        let avatarUrl = "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80";
+        let headline = "LinkedIn Professional (OAuth Authenticated)";
+
+        if (userinfoResponse.ok) {
+          const userInfo: any = await userinfoResponse.json();
+          profileName = `${userInfo.given_name || ""} ${userInfo.family_name || ""}`.trim() || profileName;
+          email = userInfo.email || email;
+          avatarUrl = userInfo.picture || avatarUrl;
+        }
+
+        // Add to our edge database snapshot
+        const db = getOrCreateDB();
+        const newAccountId = `acc-oauth-${Date.now()}`;
+        const newAccount = {
+          id: newAccountId,
+          connected: true,
+          name: profileName,
+          avatarUrl: avatarUrl,
+          headline: headline,
+          connectionsCount: 500,
+          sessionCookie: "oauth-authenticated-token",
+          proxy: "Direct OAuth Connected (No proxy node required)",
+          proxyStatus: "verified",
+          healthStatus: "healthy",
+          isActive: true,
+          rateLimits: {
+            invitesPerDay: 40,
+            messagesPerDay: 80,
+            profileViewsPerDay: 50,
+            humanDelayMinSec: 45,
+            humanDelayMaxSec: 180
+          }
+        };
+
+        // Deactivate all old and add this
+        db.accounts.forEach((acc: any) => { acc.isActive = false; });
+        db.accounts.push(newAccount);
+
+        db.automationLogs.push({
+          timestamp: new Date().toISOString(),
+          level: "success",
+          message: `LinkedIn Profile '${profileName}' successfully linked via OAuth 2.0 exchange!`
+        });
+
+        return makeResponse({ status: "success", name: profileName, avatarUrl, headline });
+      } catch (err: any) {
+        console.error("LinkedIn OAuth POST Exchange error on Edge:", err);
+        return makeResponse({ error: err.message || "An unexpected error occurred during state validation." }, 500);
+      }
+    }
+
     // E. OAUTH: LinkedIn Callback verification endpoint
     if ((path === "/api/auth/linkedin/callback" || path === "/api/auth/linkedin/callback/" || path === "/api/connect/li/callback" || path === "/api/connect/li/callback/") && method === "GET") {
       const linkedinError = url.searchParams.get("error");
