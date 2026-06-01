@@ -161,9 +161,31 @@ function LinkedInCallbackHandler() {
 
         setStatusMessage("Exchanging Authorization Code with LinkedIn...");
         
+        // Extract the initiating parent app's dynamic origin from the base64 state parameter
+        let targetOrigin = "";
+        try {
+          if (state) {
+            const decodedObj = JSON.parse(atob(state));
+            if (decodedObj && decodedObj.origin) {
+              targetOrigin = decodedObj.origin;
+            }
+          }
+        } catch (e) {
+          console.warn("Could not decode state origin on frontend callback:", e);
+          if (state && (state.startsWith("http://") || state.startsWith("https://"))) {
+            targetOrigin = state;
+          }
+        }
+
+        const baseUrl = targetOrigin ? targetOrigin.replace(/\/$/, "") : "";
+        const primaryUrl = baseUrl ? `${baseUrl}/api/connect/li/exchange` : "/api/connect/li/exchange";
+        const fallbackUrl = baseUrl ? `${baseUrl}/api/connect/li/exchange/` : "/api/connect/li/exchange/";
+
+        console.log("Routing Exchange POST request to:", primaryUrl);
+
         let response;
         try {
-          response = await fetch("/api/connect/li/exchange", {
+          response = await fetch(primaryUrl, {
             method: "POST",
             headers: {
               "Content-Type": "application/json"
@@ -177,7 +199,7 @@ function LinkedInCallbackHandler() {
         // Support trailing slash variant if edge router redirects methods 
         if (!response || response.status === 405 || response.status === 404) {
           try {
-            response = await fetch("/api/connect/li/exchange/", {
+            response = await fetch(fallbackUrl, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json"
