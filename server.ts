@@ -588,7 +588,12 @@ app.get(["/api/auth/linkedin/url", "/api/connect/li/url"], (req, res) => {
     }
 
     const redirectUri = getRedirectUri(req, isNew);
-    const state = Math.random().toString(36).substring(2, 15);
+    const originParam = (req.query.origin as string) || process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+    const stateObj = {
+      origin: originParam,
+      csrf: Math.random().toString(36).substring(2, 15)
+    };
+    const state = Buffer.from(JSON.stringify(stateObj)).toString("base64");
 
     const params = new URLSearchParams({
       response_type: "code",
@@ -623,7 +628,7 @@ app.get(["/api/auth/linkedin/status", "/api/connect/li/status"], (req, res) => {
 
 // LinkedIn OAuth 2.0 Callback endpoint
 app.get(["/api/auth/linkedin/callback", "/api/auth/linkedin/callback/", "/api/connect/li/callback", "/api/connect/li/callback/"], async (req, res) => {
-  const { code, error, error_description } = req.query;
+  const { code, state: stateParam, error, error_description } = req.query;
 
   if (error) {
     console.error("LinkedIn OAuth redirect error:", error_description);
@@ -649,6 +654,21 @@ app.get(["/api/auth/linkedin/callback", "/api/auth/linkedin/callback/", "/api/co
 
   if (!clientId || !clientSecret) {
     return res.status(500).send("LINKEDIN_CLIENT_ID or LINKEDIN_CLIENT_SECRET is missing on the server environment.");
+  }
+
+  let parentOrigin = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+  try {
+    if (stateParam) {
+      const decoded = JSON.parse(Buffer.from(stateParam as string, "base64").toString("utf-8"));
+      if (decoded && decoded.origin) {
+        parentOrigin = decoded.origin;
+      }
+    }
+  } catch (e) {
+    console.warn("Could not decode state origin on Express:", e);
+    if (stateParam && ((stateParam as string).startsWith("http://") || (stateParam as string).startsWith("https://"))) {
+      parentOrigin = stateParam as string;
+    }
   }
 
   try {
@@ -740,16 +760,20 @@ app.get(["/api/auth/linkedin/callback", "/api/auth/linkedin/callback/", "/api/co
             <div style="color: #22c55e; font-size: 40px; margin-bottom: 0.5rem; line-height: 1;">✓</div>
             <h3 style="color: #22c55e; margin-top: 0;">Connection Successful!</h3>
             <p style="font-size: 13px; color: #a1a1aa; line-height: 1.6;">Your LinkedIn account <strong>${profileName}</strong> is now securely connected to Skylan.</p>
-            <p style="font-size: 11px; color: #71717a; margin-top: 1.5rem;">This window will close automatically shortly.</p>
+            <p style="font-size: 11px; color: #71717a; margin-top: 1.5rem;">Redirecting you back to your secured workspace...</p>
             <script>
-              setTimeout(() => {
+              const parentOrigin = "${parentOrigin}";
+              // Attempt standard postMessage callback
+              try {
                 if (window.opener) {
-                  window.opener.postMessage({ type: 'LINKEDIN_OAUTH_SUCCESS', name: "${profileName}" }, '*');
-                  window.close();
-                } else {
-                  window.location.href = '/';
+                  window.opener.postMessage({ type: "LINKEDIN_OAUTH_SUCCESS", name: "${profileName}" }, "*");
                 }
-              }, 2500);
+              } catch (e) {}
+              
+              // Universal cross-origin fallback redirect
+              setTimeout(() => {
+                window.location.href = parentOrigin + "/?linkedin_oauth_success=true&name=" + encodeURIComponent("${profileName}");
+              }, 1800);
             </script>
           </div>
         </body>

@@ -187,7 +187,8 @@ export default function SettingsPanel({
     try {
       let oauthUrl = "";
       try {
-        const res = await fetch("/api/connect/li/url");
+        const originParam = encodeURIComponent(window.location.origin);
+        const res = await fetch(`/api/connect/li/url?origin=${originParam}`);
         const contentType = res.headers.get("content-type");
         if (contentType && contentType.includes("application/json")) {
           const data = await res.json();
@@ -204,7 +205,8 @@ export default function SettingsPanel({
       // Try legacy route if safe route failed
       if (!oauthUrl) {
         try {
-          const res = await fetch("/api/auth/linkedin/url");
+          const originParam = encodeURIComponent(window.location.origin);
+          const res = await fetch(`/api/auth/linkedin/url?origin=${originParam}`);
           const contentType = res.headers.get("content-type");
           if (contentType && contentType.includes("application/json")) {
             const data = await res.json();

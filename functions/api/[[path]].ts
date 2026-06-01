@@ -549,7 +549,13 @@ export const onRequest = async (context: any) => {
       const isNew = path.includes("/connect/li");
       const clientId = context.env.LINKEDIN_CLIENT_ID || "86ufehp1ori1dk";
       const redirectUri = isNew ? `${url.origin}/api/connect/li/callback` : `${url.origin}/api/auth/linkedin/callback`;
-      const state = Math.random().toString(36).substring(2, 15);
+      
+      const originParam = url.searchParams.get("origin") || url.origin;
+      const stateObj = {
+        origin: originParam,
+        csrf: Math.random().toString(36).substring(2, 15)
+      };
+      const state = btoa(JSON.stringify(stateObj));
 
       const params = new URLSearchParams({
         response_type: "code",
@@ -583,6 +589,7 @@ export const onRequest = async (context: any) => {
       const linkedinError = url.searchParams.get("error");
       const linkedinErrorDesc = url.searchParams.get("error_description");
       const code = url.searchParams.get("code");
+      const stateParam = url.searchParams.get("state") || "";
 
       if (linkedinError) {
         return makeResponse(`
@@ -600,6 +607,21 @@ export const onRequest = async (context: any) => {
 
       if (!code) {
         return makeResponse("Authorization code missing from LinkedIn redirection query.", 400, true);
+      }
+
+      let parentOrigin = url.origin;
+      try {
+        if (stateParam) {
+          const decoded = JSON.parse(atob(stateParam));
+          if (decoded && decoded.origin) {
+            parentOrigin = decoded.origin;
+          }
+        }
+      } catch (e) {
+        console.warn("Could not decode state origin on Cloudflare Edge:", e);
+        if (stateParam && (stateParam.startsWith("http://") || stateParam.startsWith("https://"))) {
+          parentOrigin = stateParam;
+        }
       }
 
       const isNew = path.includes("/connect/li");
@@ -688,16 +710,20 @@ export const onRequest = async (context: any) => {
               <div style="color: #22c55e; font-size: 40px; margin-bottom: 0.5rem; line-height: 1;">✓</div>
               <h3 style="color: #22c55e; margin-top: 0;">Connection Successful!</h3>
               <p style="font-size: 13px; color: #a1a1aa; line-height: 1.6;">Your LinkedIn account <strong>${profileName}</strong> is now securely connected.</p>
-              <p style="font-size: 11px; color: #71717a; margin-top: 1.5rem;">This window will close automatically shortly.</p>
+              <p style="font-size: 11px; color: #71717a; margin-top: 1.5rem;">Redirecting you back to your secured workspace...</p>
               <script>
-                setTimeout(() => {
+                const parentOrigin = "${parentOrigin}";
+                // Attempt standard postMessage callback
+                try {
                   if (window.opener) {
-                    window.opener.postMessage({ type: 'LINKEDIN_OAUTH_SUCCESS', name: "${profileName}" }, '*');
-                    window.close();
-                  } else {
-                    window.location.href = '/';
+                    window.opener.postMessage({ type: "LINKEDIN_OAUTH_SUCCESS", name: "${profileName}" }, "*");
                   }
-                }, 2500);
+                } catch (e) {}
+
+                // Universal cross-origin fallback redirect
+                setTimeout(() => {
+                  window.location.href = parentOrigin + "/?linkedin_oauth_success=true&name=" + encodeURIComponent("${profileName}");
+                }, 1800);
               </script>
             </div>
           </body>

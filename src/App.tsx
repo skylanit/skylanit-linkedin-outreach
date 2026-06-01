@@ -110,6 +110,36 @@ export default function App() {
     }).catch(err => console.error("Could not sync state to server db:", err));
   };
 
+  // Intercept universal same-origin redirect callback to relay success cross-domain
+  React.useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const success = urlParams.get("linkedin_oauth_success");
+    const name = urlParams.get("name") || "LinkedIn User";
+    
+    if (success === "true") {
+      console.info("Detected LinkedIn OAuth success sweep from URL parameters:", name);
+      
+      // If we are running inside the popup that was redirected back to parentOrigin
+      if (window.opener) {
+        try {
+          window.opener.postMessage({ type: 'LINKEDIN_OAUTH_SUCCESS', name }, '*');
+          // Close the popup window automatically
+          setTimeout(() => {
+            window.close();
+          }, 300);
+        } catch (e) {
+          console.warn("Failed to communicate with opener from same-origin popup:", e);
+        }
+      }
+      
+      // Clean up the URL query parameters so the Address Bar stays pristine
+      const url = new URL(window.location.href);
+      url.searchParams.delete("linkedin_oauth_success");
+      url.searchParams.delete("name");
+      window.history.replaceState({}, document.title, url.pathname + url.search);
+    }
+  }, []);
+
   // 1. Load entire database state on first bootstrap mount
   React.useEffect(() => {
     const loadInitDB = () => {
