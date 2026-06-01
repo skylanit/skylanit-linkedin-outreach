@@ -394,14 +394,14 @@ function LinkedInCallbackHandler() {
 }
 
 export default function App() {
-  const [showLanding, setShowLanding] = React.useState(() => {
+  const [showLanding, setShowLanding] = React.useState(false);
+  const [isOnboarding, setIsOnboarding] = React.useState(() => {
     try {
       return localStorage.getItem("skylan_onboarding_completed") !== "true";
     } catch (e) {
       return true;
     }
   });
-  const [isOnboarding, setIsOnboarding] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<string>('dashboard');
 
   // React Global State corresponding to loaded items
@@ -1012,12 +1012,12 @@ export default function App() {
             onClick={() => {
               localStorage.removeItem("skylan_onboarding_completed");
               localStorage.removeItem("skylan_local_db");
-              setShowLanding(true);
+              setIsOnboarding(true);
             }}
-            className="w-full p-1.5 px-3 hover:bg-zinc-800/10 hover:text-red-400 text-zinc-500 rounded-lg text-[10.5px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5"
+            className="w-full p-1.5 px-3 hover:bg-[#7059FF]/10 hover:text-red-400 text-zinc-500 rounded-lg text-[10.5px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5"
           >
             <LogOut size={13} />
-            Show Landing page
+            Disconnect LinkedIn Account
           </button>
         </div>
 
