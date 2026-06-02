@@ -18,7 +18,9 @@ import {
   Check,
   Globe,
   Info,
-  Loader2
+  Loader2,
+  Mail,
+  Lock as LockKeyhole
 } from 'lucide-react';
 import { LinkedInAccount, IntegrationSettings } from '../types';
 
@@ -46,6 +48,17 @@ export default function SettingsPanel({
   const [newProxy, setNewProxy] = React.useState('US-East-1 (Premium static Residential) - 67.215.102.18');
   const [newCookie, setNewCookie] = React.useState('');
   const [newAvatar, setNewAvatar] = React.useState('https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80');
+  const [newEmail, setNewEmail] = React.useState('');
+  const [newPassword, setNewPassword] = React.useState('');
+
+  const extractNameFromEmail = (email: string): string => {
+    if (!email) return 'Alex Mercer';
+    const part = email.split('@')[0];
+    return part
+      .split(/[\._\-]/)
+      .map(p => p.charAt(0).toUpperCase() + p.slice(1))
+      .join(' ');
+  };
 
   const [testingProxy, setTestingProxy] = React.useState(false);
   const [proxyResult, setProxyResult] = React.useState<'success' | 'failed' | null>(null);
@@ -122,154 +135,63 @@ export default function SettingsPanel({
   };
 
   // Handle adding a brand-new LinkedIn pipeline account
-  const handleConnectNewAccount = (e: React.FormEvent) => {
+  const handleConnectNewAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
     setFormSuccess('');
 
-    if (!newName.trim() || !newCookie.trim()) {
-      setFormError("Account Full Name and LinkedIn Cookie (LI_AT) are required.");
+    if (!newEmail.trim() || !newPassword) {
+      setFormError("Both LinkedIn Email and Password are required.");
       return;
     }
 
     setTestingProxy(true);
-    
-    // Auto proxy verification on connection attempt
-    fetch("/api/accounts/test-proxy", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ proxy: newProxy })
-    })
-    .then(res => res.json())
-    .then(data => {
-      setTestingProxy(false);
-      
-      const newAcc: LinkedInAccount = {
-        id: `acc-fresh-${Date.now()}`,
-        connected: true,
-        name: newName,
-        avatarUrl: newAvatar,
-        headline: newHeadline || "SaaS Builder & Marketing Advisor",
-        connectionsCount: Number(newConnections) || 500,
-        sessionCookie: newCookie,
-        proxy: newProxy,
-        proxyStatus: data.status === 'success' ? 'verified' : 'failed',
-        healthStatus: 'healthy',
-        isActive: linkedinAccounts.length === 0, // set active if it's the first one
-        rateLimits: {
-          invitesPerDay: 40,
-          messagesPerDay: 80,
-          profileViewsPerDay: 50,
-          humanDelayMinSec: 45,
-          humanDelayMaxSec: 180
-        }
-      };
 
-      if (onUpdateAccounts) {
-        onUpdateAccounts([...linkedinAccounts, newAcc]);
-        setFormSuccess(`Successfully authenticated & proxy-bounded LinkedIn profile for '${newName}'!`);
-        // Reset form variables
-        setNewName('');
-        setNewHeadline('');
-        setNewCookie('');
-        setNewConnections(1500);
+    try {
+      const profileName = extractNameFromEmail(newEmail);
+      const boostResponse = await fetch("/api/linkedin/onboard-custom-boost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ownerName: profileName,
+          ownerEmail: newEmail,
+          linkedinEmail: newEmail,
+          linkedinPassword: newPassword,
+          targetIndustry: "B2B SaaS Founders & Tech Executives",
+          isOAuth: false
+        })
+      });
+
+      if (!boostResponse.ok) {
+        const errData = await boostResponse.json().catch(() => ({}));
+        throw new Error(errData.error || "Verification server returned failure status.");
       }
-    })
-    .catch(() => {
+
+      const resData = await boostResponse.json();
       setTestingProxy(false);
-      setFormError("Proxy integrity check timed out. Please specify a valid and routeable proxy IP node.");
-    });
+
+      if (resData && resData.db) {
+        // Hydrate local database cache
+        localStorage.setItem("skylan_local_db", JSON.stringify(resData.db));
+        
+        // Update user accounts list
+        if (onUpdateAccounts && resData.db.accounts) {
+          onUpdateAccounts(resData.db.accounts);
+          setFormSuccess(`Successfully verified and hooked LinkedIn profile for '${profileName}'!`);
+          setNewEmail('');
+          setNewPassword('');
+        }
+      } else {
+        throw new Error("Could not construct authentic proxy bridge.");
+      }
+    } catch (err: any) {
+      setTestingProxy(false);
+      setFormError(err.message || "Failed to establish tunnel. Please check credentials.");
+    }
   };
 
-  const handleConnectOAuth = async () => {
-    setFormError('');
-    setFormSuccess('');
-    setTestingProxy(true);
-    try {
-      let oauthUrl = "";
-      try {
-        const originParam = encodeURIComponent(window.location.origin);
-        const res = await fetch(`/api/connect/li/url?origin=${originParam}`);
-        const contentType = res.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
-          const data = await res.json();
-          if (res.ok && data.url) {
-            oauthUrl = data.url;
-          } else if (data.error) {
-            console.warn("Safe handshake warning:", data.error);
-          }
-        }
-      } catch (e) {
-        console.warn("Primary OAuth handshake failed, trying legacy route...", e);
-      }
-
-      // Try legacy route if safe route failed
-      if (!oauthUrl) {
-        try {
-          const originParam = encodeURIComponent(window.location.origin);
-          const res = await fetch(`/api/auth/linkedin/url?origin=${originParam}`);
-          const contentType = res.headers.get("content-type");
-          if (contentType && contentType.includes("application/json")) {
-            const data = await res.json();
-            if (res.ok && data.url) {
-              oauthUrl = data.url;
-            }
-          }
-        } catch (e) {
-          console.warn("Legacy OAuth handshake failed.", e);
-        }
-      }
-
-      // Secure client-side dynamic fallback construction (handles adblocker interventions and static SPA hosts flawlessly)
-      if (!oauthUrl) {
-        console.info("Constructing secure client-side LinkedIn OAuth dynamic url fallback...");
-        const clientId = "86ufehp1ori1dk";
-        
-        // Match registered production redirect URL if in preview environment, so LinkedIn doesn't reject it
-        let redirectUri = `${window.location.origin}/api/connect/li/callback`;
-        if (
-          window.location.origin.includes("run.app") || 
-          window.location.origin.includes("localhost") || 
-          window.location.origin.includes("3000") || 
-          !window.location.origin.includes("skylanit-linkedin-outreach.info-moneymatters1.workers.dev")
-        ) {
-          redirectUri = "https://skylanit-linkedin-outreach.info-moneymatters1.workers.dev/api/connect/li/callback";
-        }
-
-        // Construct high-integrity base64 state containing original web origin
-        const stateObj = {
-          origin: window.location.origin,
-          csrf: Math.random().toString(36).substring(2, 15)
-        };
-        const state = btoa(JSON.stringify(stateObj));
-
-        const params = new URLSearchParams({
-          response_type: "code",
-          client_id: clientId,
-          redirect_uri: redirectUri,
-          state: state,
-          scope: "openid profile email"
-        });
-        oauthUrl = `https://www.linkedin.com/oauth/v2/authorization?${params.toString()}`;
-      }
-
-      const width = 600;
-      const height = 700;
-      const left = window.screen.width / 2 - width / 2;
-      const top = window.screen.height / 2 - height / 2;
-      const popup = window.open(
-        oauthUrl,
-        "linkedin_oauth",
-        `width=${width},height=${height},top=${top},left=${left}`
-      );
-      if (!popup) {
-        setFormError("Popup was blocked! Please allow popups for Skylan to authenticate with LinkedIn.");
-      }
-    } catch (error: any) {
-      setFormError(error.message || "Failed to initiate secure LinkedIn auth handshake.");
-    } finally {
-      setTestingProxy(false);
-    }
+  const handleConnectOAuth = () => {
+    setFormError("OAuth is currently disabled. Please use the secure Email & Password input above.");
   };
 
   React.useEffect(() => {
@@ -437,166 +359,59 @@ export default function SettingsPanel({
                   </div>
                 )}
 
-                {/* Secure Official OAuth Connection */}
-                <div className="p-5 bg-zinc-900/30 rounded-xl border border-zinc-850 space-y-3.5">
+                {/* Secure Real Profile Connection Form */}
+                <form onSubmit={handleConnectNewAccount} className="p-5 bg-zinc-900/30 rounded-xl border border-zinc-850 space-y-3.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] bg-indigo-500/15 text-indigo-400 font-extrabold px-2.5 py-1 rounded uppercase tracking-wider">Official Integration</span>
-                    <span className="text-[9px] text-indigo-400 font-bold flex items-center gap-1 font-mono">✓ High Connection Health</span>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-zinc-150 uppercase tracking-wide">Sign in with LinkedIn</h4>
-                    <p className="text-[11px] text-zinc-500 leading-relaxed mt-1">Authenticates directly on LinkedIn secure servers. Safely imports profile data.</p>
-                    
-                    <div className="mt-2.5 bg-[#4F46E5]/10 border border-[#4F46E5]/20 p-2.5 rounded-lg text-[10px] text-zinc-300 leading-relaxed font-sans">
-                      💡 <strong>Custom Domain Notice:</strong> If you are hosted on your live Cloudflare Pages URL and get a <code>redirect_uri mismatch</code> error from LinkedIn, it is because you need to register your custom live site domain in your own LinkedIn Developer Portal application. You can add simulated sandbox accounts below to bypass this during testing!
-                    </div>
-                  </div>
-                  
-                  <button
-                    type="button"
-                    onClick={handleConnectOAuth}
-                    disabled={testingProxy}
-                    className="w-full py-3 px-3 bg-[#0274b3] hover:bg-[#026399] disabled:opacity-50 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-[#0274b3]/10 text-center"
-                  >
-                    <Linkedin size={13} />
-                    <span>Authorize LinkedIn Profile</span>
-                  </button>
-
-                  <div className="pt-2 border-t border-zinc-800">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (onUpdateAccounts) {
-                          const demoNames = [
-                            "Mila Kowalski", "Marcus Drake", "Sonia Patel", "David Vance"
-                          ];
-                          const avatars = [
-                            "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-                            "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
-                            "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
-                            "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80"
-                          ];
-                          const idx = Math.floor(Math.random() * demoNames.length);
-                          const randName = demoNames[idx];
-                          const randAvatar = avatars[idx];
-                          
-                          const newDemoAcc: LinkedInAccount = {
-                            id: `acc-demo-${Date.now()}`,
-                            connected: true,
-                            name: randName,
-                            avatarUrl: randAvatar,
-                            headline: "Enterprise Director / GTM SaaS Strategist",
-                            connectionsCount: Math.floor(Math.random() * 3000) + 1000,
-                            sessionCookie: "mock-session-cookie",
-                            proxy: "US-West-1 (Premium static Residential) - 45.123.88.9",
-                            proxyStatus: "verified",
-                            healthStatus: "healthy",
-                            isActive: false,
-                            rateLimits: {
-                              invitesPerDay: 40,
-                              messagesPerDay: 80,
-                              profileViewsPerDay: 50,
-                              humanDelayMinSec: 30,
-                              humanDelayMaxSec: 120
-                            }
-                          };
-                          onUpdateAccounts([...linkedinAccounts, newDemoAcc]);
-                          setFormSuccess(`Instantly generated and connected simulated Sandbox profile: ${randName}!`);
-                        }
-                      }}
-                      className="w-full py-2 px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-[10.5px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer text-center"
-                    >
-                      <Sliders size={12} className="text-zinc-500" />
-                      <span>Simulate & Seed Sandbox Profile</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Secure Manual Credentials & Session Cookie Bridge */}
-                <form onSubmit={handleConnectNewAccount} className="p-5 bg-zinc-900/30 rounded-xl border border-zinc-850 space-y-3.5 mt-5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] bg-emerald-500/15 text-emerald-400 font-extrabold px-2.5 py-1 rounded uppercase tracking-wider">Manual Hook</span>
-                    <span className="text-[9px] text-emerald-400 font-bold flex items-center gap-1 font-mono">✓ Cookie & Proxy Bonded</span>
+                    <span className="text-[10px] bg-[#7059FF]/15 text-[#7059FF] font-extrabold px-2.5 py-1 rounded uppercase tracking-wider">Secure Direct Bridge</span>
+                    <span className="text-[9px] text-[#7059FF] font-bold flex items-center gap-1 font-mono">✓ SSL TLS AES-256</span>
                   </div>
 
                   <div>
-                    <h4 className="text-sm font-bold text-zinc-150 uppercase tracking-wide">Connect manually with Session Cookie</h4>
-                    <p className="text-[11px] text-zinc-500 leading-relaxed mt-1">Directly bind your real LinkedIn session by specifying your profile details and your session cookie (<code>li_at</code>) from your browser.</p>
+                    <h4 className="text-sm font-bold text-zinc-150 uppercase tracking-wide">Connect LinkedIn Profile</h4>
+                    <p className="text-[11px] text-zinc-500 leading-relaxed mt-1">
+                      Directly verify and link your active LinkedIn profile on secure cloud residential proxy servers.
+                    </p>
                   </div>
 
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Full Name</label>
+                      <label className="block text-[9 px] font-bold text-zinc-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <Mail size={11} className="text-zinc-600" /> LinkedIn Email
+                      </label>
                       <input
-                        type="text"
+                        type="email"
                         required
-                        placeholder="e.g., Alex Mercer"
-                        value={newName}
-                        onChange={e => setNewName(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                        placeholder="e.g., alex.mercer@gmail.com"
+                        value={newEmail}
+                        onChange={e => setNewEmail(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 focus:outline-none focus:border-[#7059FF]"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Headline</label>
+                      <label className="block text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <LockKeyhole size={11} className="text-zinc-600" /> LinkedIn Password
+                      </label>
                       <input
-                        type="text"
-                        placeholder="e.g., VP of Sales @ TechCorp"
-                        value={newHeadline}
-                        onChange={e => setNewHeadline(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Connections Count</label>
-                      <input
-                        type="number"
-                        value={newConnections}
-                        onChange={e => setNewConnections(parseInt(e.target.value) || 500)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Residential Proxy Node Address (US-East / West)</label>
-                      <input
-                        type="text"
+                        type="password"
                         required
-                        value={newProxy}
-                        onChange={e => setNewProxy(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono"
+                        placeholder="••••••••"
+                        value={newPassword}
+                        onChange={e => setNewPassword(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 focus:outline-none focus:border-[#7059FF]"
                       />
-                    </div>
-
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <label className="block text-[9px] font-bold text-zinc-500 uppercase tracking-wider">LinkedIn Session Cookie (li_at)</label>
-                        <span className="text-[8.5px] text-zinc-500 font-semibold">Values mapped to Playwright vaults</span>
-                      </div>
-                      <input
-                        type="text"
-                        required
-                        placeholder="AQEDATk72_8C82BMAAABkr..."
-                        value={newCookie}
-                        onChange={e => setNewCookie(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono"
-                      />
-                      <span className="text-[8.5px] text-zinc-500 block mt-1 leading-relaxed">
-                        💡 <strong>How to get this:</strong> Log in to your LinkedIn profile on Google Chrome, right-click anywhere and press <strong>Inspect</strong>. Go to <strong>Application</strong> &rarr; <strong>Cookies</strong> &rarr; <strong>linkedin.com</strong>, find the cookie named <code>li_at</code>, and copy its value.
-                      </span>
                     </div>
                   </div>
 
                   <button
                     type="submit"
                     disabled={testingProxy}
-                    className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md"
+                    className="w-full py-2.5 px-3 bg-[#7059FF] hover:bg-[#5E47EA] disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md"
                   >
                     {testingProxy ? (
                       <>
                         <Loader2 size={12} className="animate-spin" />
-                        <span>Testing residential proxy tunnel...</span>
+                        <span>Verifying with LinkedIn servers...</span>
                       </>
                     ) : (
                       <>
